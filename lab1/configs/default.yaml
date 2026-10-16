@@ -1,0 +1,44 @@
+# Default RAG pipeline (values chosen by the experiments, see DECISIONS.md / experiments/REPORT.md).
+# Any value can be overridden from the CLI:  python run.py --set retrieval.top_k=10 search "..."
+source:
+  include:
+    - content/applications/inventory_and_mrp/inventory
+    - content/applications/inventory_and_mrp/barcode
+processing:
+  version: 1
+  keep_image_alt: false
+  keep_seealso: true
+  min_doc_chars: 200
+chunking:
+  strategy: section
+  max_chars: 1000
+  overlap: 0
+  min_chars: 100
+  add_header: true
+embedding:
+  backend: minilm
+vectorstore:
+  backend: faiss
+  index_type: flat
+retrieval:
+  mode: hybrid
+  top_k: 20
+  rrf_k: 60
+  candidates_per_retriever: 50
+  translate_query: false
+filters:
+  enabled: true
+  min_score: null
+  min_chars: 60
+  dedup: true
+  near_dup_jaccard: 0.9
+  max_per_doc: 3
+reranker:
+  backend: none
+  top_n: 5
+  min_score: null
+generation:
+  backend: ollama
+  prompt: strict
+  max_context_chars: 6000
+  answer_language: auto
