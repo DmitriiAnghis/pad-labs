@@ -1,0 +1,5 @@
+# Optional components (install on the machine where you run the heavy experiments)
+# Cross-encoder reranker (downloads models from huggingface.co on first use)
+sentence-transformers>=3.0
+# Qdrant vector store backend (local file mode or a Qdrant server for labs 2-3)
+qdrant-client>=1.9

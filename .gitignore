@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Secrets / local config
+.env
+*.env.local
+
+# Generated data (reproducible with `python run.py grab/process/index`)
+lab1/data/sources/
+lab1/data/raw/
+lab1/data/processed/
+lab1/data/chunks/
+lab1/data/indexes/
+lab1/data/cache/
+lab1/data/models/
+lab1/data/logs/
+lab1/data/runs/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

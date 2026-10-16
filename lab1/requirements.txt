@@ -1,0 +1,14 @@
+# Core pipeline: works fully offline/CPU (grabber, preprocessing, BM25, TF-IDF/LSA, MiniLM-ONNX, FAISS, API, evaluation)
+numpy>=1.26
+scikit-learn>=1.4
+faiss-cpu>=1.8
+onnxruntime>=1.17
+tokenizers>=0.15
+snowballstemmer>=2.2
+requests>=2.31
+pyyaml>=6.0
+python-dotenv>=1.0
+pydantic>=2.5
+fastapi>=0.110
+uvicorn>=0.27
+pytest>=8.0
