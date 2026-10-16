@@ -198,6 +198,6 @@ def _headline(kind: str, s: dict) -> str:
     if kind == "retrieval":
         f = s["final"]
         return (f"MRR={f['mrr']:.3f} Hit@1={f['hit@1']:.3f} Hit@5={f['hit@5']:.3f} R@5={f['recall@5']:.3f} "
-                f"Ev@5={f['evidence@5']:.3f} R@20(ret)={s['retriever']['recall@20']:.3f} p50={s['latency_ms']['p50']}ms")
+                f"Ev@5={f['evidence@5']:.3f} Ev@ctx={f.get('evidence@ctx', 0):.3f} R@20(ret)={s['retriever']['recall@20']:.3f} p50={s['latency_ms']['p50']}ms")
     return (f"behaviour={s['behaviour_accuracy']} no_answer_refused={s['no_answer_refused']} false_refusals={s['false_refusals']} "
             f"keywords={s['keyword_coverage']} citations={s['citation_rate']} p50={s['latency_ms']['p50']}ms")

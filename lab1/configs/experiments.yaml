@@ -16,23 +16,24 @@
 # the rows it actually ran.
 
 chunking:
-  description: Chunking strategy x chunk size (hybrid BM25 + MiniLM, no reranker)
+  description: Chunking strategy x chunk size (hybrid BM25 + MiniLM, no reranker). Every variant gets the same 4000-character context budget, so Evidence@ctx compares equal amounts of text
   kind: retrieval
-  focus: final.evidence@5
+  focus: final.evidence@ctx
   langs: [en]
+  base: {reranker.top_n: 20, generation.max_context_chars: 4000}
   grid:
     chunking.strategy: [fixed, paragraph, section]
-    chunking.max_chars: [500, 1000, 1500]
+    chunking.max_chars: [500, 1000, 1500, 2000]
   variants:
     - name: fixed_overlap-1000-o200
       set: {chunking.strategy: fixed_overlap, chunking.max_chars: 1000, chunking.overlap: 200}
 
 overlap:
-  description: Overlap of fixed-size windows (1000 characters)
+  description: Overlap of fixed-size windows (1000 characters), same 4000-character context budget
   kind: retrieval
-  focus: final.evidence@5
+  focus: final.evidence@ctx
   langs: [en]
-  base: {chunking.strategy: fixed_overlap, chunking.max_chars: 1000}
+  base: {chunking.strategy: fixed_overlap, chunking.max_chars: 1000, reranker.top_n: 20, generation.max_context_chars: 4000}
   grid:
     chunking.overlap: [0, 100, 200, 300]
 
@@ -185,3 +186,22 @@ context:
   grid:
     reranker.top_n: [3, 5, 8]
     generation.max_context_chars: [3000, 6000]
+
+rerank_threshold:
+  description: Threshold on the MaxSim reranker score - refusal before the LLM vs. lost answers
+  kind: retrieval
+  focus: refusal
+  langs: [en, ru]
+  base: {reranker.backend: maxsim, filters.min_score: null}
+  grid:
+    reranker.min_score: [null, 0.6, 0.62, 0.64, 0.66, 0.68]
+
+threshold_bge_m3:
+  description: Similarity threshold recalibrated for the multilingual bge-m3 embeddings (EN and RU)
+  kind: retrieval
+  focus: refusal
+  langs: [en, ru]
+  requires: [ollama]
+  base: {embedding.backend: ollama, embedding.model: bge-m3}
+  grid:
+    filters.min_score: [null, 0.4, 0.45, 0.5, 0.55, 0.6]

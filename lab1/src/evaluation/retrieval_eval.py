@@ -18,14 +18,16 @@ from typing import Iterable
 from common.config import PipelineConfig, Settings
 from common.utils import utc_now, write_json
 from evaluation.dataset import load_questions, question_text
-from evaluation.metrics import aggregate, best_threshold, mean, percentile, retrieval_metrics
+from evaluation.metrics import (aggregate, best_threshold, bootstrap_ci, evidence_hit_at_k, hit_at_k, mean, percentile,
+                                retrieval_metrics)
+from generation.generator import build_context
 
 log = logging.getLogger("evaluation.retrieval")
 
 STAGES = ("retriever", "filtered", "final")
 DEFAULT_KS = (1, 3, 5, 10, 20)
 # the numbers shown in summaries / reports
-HEADLINE = ("hit@1", "hit@5", "recall@5", "mrr", "ndcg@5", "evidence@5")
+HEADLINE = ("hit@1", "hit@5", "recall@5", "mrr", "ndcg@5", "evidence@5", "evidence@ctx")
 
 
 def evaluate_retrieval(pipeline, questions: list[dict], lang: str = "en", ks: Iterable[int] = DEFAULT_KS) -> dict:
@@ -34,6 +36,8 @@ def evaluate_retrieval(pipeline, questions: list[dict], lang: str = "en", ks: It
     for q in questions:
         text = question_text(q, lang)
         r = pipeline.retrieve(text)
+        # exactly the chunks the LLM would get (whole chunks up to the character budget)
+        _, in_context = build_context(r.reranked, pipeline.config.generation.max_context_chars)
         row = {
             "id": q["id"],
             "type": q["type"],
@@ -46,6 +50,7 @@ def evaluate_retrieval(pipeline, questions: list[dict], lang: str = "en", ks: It
             "top_dense": max((c.scores["dense"] for c in r.retrieved if "dense" in c.scores), default=None),
             "top_rerank": r.reranked[0].scores.get("rerank") if r.reranked else None,
             "final_docs": [c.chunk["doc_id"] for c in r.reranked],
+            "context_chars": sum(len(c.chunk["text"]) for c in in_context),
         }
         if q["type"] != "no_answer":
             for stage, cands in (("retriever", r.retrieved), ("filtered", r.filtered), ("final", r.reranked)):
@@ -56,6 +61,10 @@ def evaluate_retrieval(pipeline, questions: list[dict], lang: str = "en", ks: It
                     q["evidence"],
                     ks,
                 )
+            # Evidence@ctx: the answer is inside the context the LLM actually receives. Unlike
+            # Evidence@5 it compares chunk sizes fairly (5 small chunks hold less text than 5 big ones).
+            row["final"]["evidence@ctx"] = evidence_hit_at_k([c.chunk["text"] for c in in_context], q["evidence"], len(in_context))
+            row["final"]["hit@ctx"] = hit_at_k([c.chunk["doc_id"] for c in in_context], set(q["relevant_docs"]), len(in_context))
         rows.append(row)
     return {"summary": summarize(rows, ks), "rows": rows}
 
@@ -68,10 +77,13 @@ def summarize(rows: list[dict], ks: Iterable[int] = DEFAULT_KS) -> dict:
     summary: dict = {"questions": len(rows), "answerable": len(answerable), "no_answer": len(no_answer)}
     for stage in STAGES:
         summary[stage] = aggregate([r[stage] for r in answerable], metric_keys)
+    summary["final"].update(aggregate([r["final"] for r in answerable], ("evidence@ctx", "hit@ctx")))
+    summary["context_chars"] = mean(r["context_chars"] for r in answerable)
     by_type = {}
     for t in sorted({r["type"] for r in answerable}):
         sub = [r["final"] for r in answerable if r["type"] == t]
         by_type[t] = {"n": len(sub), **aggregate(sub, HEADLINE)}
+    summary["final_ci95"] = {m: bootstrap_ci([r["final"][m] for r in answerable]) for m in ("mrr", "hit@1", "evidence@5", "evidence@ctx")}
     summary["final_by_type"] = by_type
     summary["refusal"] = {
         # nothing left after filters/reranker -> the pipeline refuses without calling the LLM

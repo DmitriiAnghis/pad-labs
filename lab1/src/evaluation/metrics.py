@@ -109,6 +109,23 @@ def aggregate(rows: list[dict], keys: Iterable[str]) -> dict:
     return {k: mean(r.get(k) for r in rows) for k in keys}
 
 
+def bootstrap_ci(values: list[float], n: int = 2000, alpha: float = 0.05, seed: int = 0) -> list[float] | None:
+    """95% bootstrap confidence interval of the mean (resampling questions with replacement).
+
+    With ~40 questions one question moves a mean by ~0.025, so differences between variants
+    that lie inside each other's interval are not evidence that one variant is better.
+    """
+    if len(values) < 2:
+        return None
+    import numpy as np
+
+    rng = np.random.default_rng(seed)
+    arr = np.asarray(values, dtype=float)
+    means = arr[rng.integers(0, len(arr), size=(n, len(arr)))].mean(axis=1)
+    lo, hi = np.quantile(means, [alpha / 2, 1 - alpha / 2])
+    return [round(float(lo), 3), round(float(hi), 3)]
+
+
 def best_threshold(pos_scores: list[float], neg_scores: list[float]) -> dict:
     """Threshold on a score that best separates answerable (pos) from no-answer (neg) questions.
 

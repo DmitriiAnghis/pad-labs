@@ -14,12 +14,14 @@ from evaluation.experiments import RESULTS_DIR, load_experiments
 REPORT = LAB_ROOT / "experiments" / "REPORT.md"
 
 RETRIEVAL_COLS = [
-    ("MRR", lambda s: s["final"]["mrr"]),
+    ("MRR [95% CI]", lambda s: f"{s['final']['mrr']:.3f} [{s['final_ci95']['mrr'][0]:.2f}-{s['final_ci95']['mrr'][1]:.2f}]" if s.get("final_ci95") else s["final"]["mrr"]),
     ("Hit@1", lambda s: s["final"]["hit@1"]),
     ("Hit@5", lambda s: s["final"]["hit@5"]),
     ("Recall@5", lambda s: s["final"]["recall@5"]),
     ("nDCG@5", lambda s: s["final"]["ndcg@5"]),
     ("Evidence@5", lambda s: s["final"]["evidence@5"]),
+    ("Evidence@ctx", lambda s: s["final"].get("evidence@ctx")),
+    ("context chars", lambda s: round(s["context_chars"]) if s.get("context_chars") is not None else None),
     ("Recall@20 (retriever)", lambda s: s["retriever"]["recall@20"]),
     ("no context: answerable / no-answer", lambda s: f"{_n(s['refusal']['answerable_without_context'])} / {_n(s['refusal']['no_answer_without_context'])}"),
     ("p50 ms", lambda s: s["latency_ms"]["p50"]),
