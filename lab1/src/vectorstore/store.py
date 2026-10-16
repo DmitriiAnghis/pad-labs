@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import atexit
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -84,6 +85,7 @@ class QdrantStore(VectorStore):
         except ImportError as exc:  # pragma: no cover
             raise RuntimeError("qdrant-client is not installed: pip install -r requirements-extra.txt") from exc
         self.client = QdrantClient(url=url) if url else QdrantClient(path=str(path))
+        atexit.register(self.client.close)  # close the local storage before interpreter shutdown
         self.collection = collection
         self.dim = dim
         if self.client.collection_exists(collection):

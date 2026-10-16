@@ -159,9 +159,10 @@ def cmd_experiment(args) -> int:
         for name, desc in list_experiments():
             print(f"{name:<22} {desc}")
         return 0
-    names = [n.strip() for n in args.name.split(",")]
+    names = [n for n, _ in list_experiments()] if args.name == "all" else [n.strip() for n in args.name.split(",")]
+    only = [v.strip() for v in args.only.split(",")] if args.only else None
     for name in names:
-        run_experiment(settings, name, lang=args.lang, limit=args.limit)
+        run_experiment(settings, name, lang=args.lang, limit=args.limit or None, only=only)
     return 0
 
 
@@ -250,9 +251,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--judge", action="store_true", help="LLM-as-a-judge scores (Ollama, JUDGE_MODEL)")
     sp.add_argument("--limit", type=int, default=0)
     sp.set_defaults(func=cmd_eval)
-    sp = sub.add_parser("experiment", help="run an experiment suite from configs/experiments.yaml ('list' to see all)")
+    sp = sub.add_parser("experiment", help="run experiment suites from configs/experiments.yaml ('list', 'all' or names separated by commas)")
     sp.add_argument("name")
     sp.add_argument("--lang", choices=["en", "ru"], default=None)
+    sp.add_argument("--only", help="run only these variants (names separated by commas)")
     sp.add_argument("--limit", type=int, default=0)
     sp.set_defaults(func=cmd_experiment)
     sub.add_parser("report", help="rebuild experiments/REPORT.md from saved results").set_defaults(func=cmd_report)

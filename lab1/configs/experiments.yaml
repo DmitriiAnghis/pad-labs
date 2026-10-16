@@ -1,0 +1,187 @@
+# Experiments. Each one changes ONE part of the pipeline; everything else comes from
+# configs/default.yaml (+ "base"), so the comparison is on equal terms: same corpus, same
+# 47 questions, same metrics, same machine.
+#
+#   python run.py experiment list
+#   python run.py experiment chunking            # all variants, languages from "langs"
+#   python run.py experiment embeddings --lang ru
+#   python run.py report                         # experiments/REPORT.md from all results
+#
+# kind:     retrieval  -> no LLM, ranking metrics (fast, runs anywhere)
+#           generation -> full pipeline with answers (LLM variants need Ollama)
+# requires: ollama | sentence_transformers | qdrant - variants are skipped (and marked as
+#           skipped in the results) when the resource is not available.
+# ${LLM_MODEL}, ${LLM_MODEL_ALT}, ${EMBED_MODEL}, ${RERANK_MODEL} are taken from .env.
+# Results are merged by (variant, lang): re-running on another machine only replaces
+# the rows it actually ran.
+
+chunking:
+  description: Chunking strategy x chunk size (hybrid BM25 + MiniLM, no reranker)
+  kind: retrieval
+  focus: final.evidence@5
+  langs: [en]
+  grid:
+    chunking.strategy: [fixed, paragraph, section]
+    chunking.max_chars: [500, 1000, 1500]
+  variants:
+    - name: fixed_overlap-1000-o200
+      set: {chunking.strategy: fixed_overlap, chunking.max_chars: 1000, chunking.overlap: 200}
+
+overlap:
+  description: Overlap of fixed-size windows (1000 characters)
+  kind: retrieval
+  focus: final.evidence@5
+  langs: [en]
+  base: {chunking.strategy: fixed_overlap, chunking.max_chars: 1000}
+  grid:
+    chunking.overlap: [0, 100, 200, 300]
+
+header:
+  description: Contextual header (document title + section path) in the embedded text, per search mode
+  kind: retrieval
+  focus: final.mrr
+  langs: [en]
+  grid:
+    chunking.add_header: [true, false]
+    retrieval.mode: [dense, bm25, hybrid]
+
+retrieval:
+  description: Search method - lexical BM25, dense (TF-IDF/LSA, MiniLM, Ollama models), hybrid RRF
+  kind: retrieval
+  focus: final.mrr
+  langs: [en, ru]
+  variants:
+    - name: bm25
+      set: {retrieval.mode: bm25, embedding.backend: none}
+    - name: dense-tfidf
+      set: {retrieval.mode: dense, embedding.backend: tfidf}
+    - name: dense-minilm
+      set: {retrieval.mode: dense, embedding.backend: minilm}
+    - name: hybrid-tfidf
+      set: {retrieval.mode: hybrid, embedding.backend: tfidf}
+    - name: hybrid-minilm
+      set: {retrieval.mode: hybrid, embedding.backend: minilm}
+    - name: dense-bge-m3
+      requires: [ollama]
+      set: {retrieval.mode: dense, embedding.backend: ollama, embedding.model: bge-m3}
+    - name: hybrid-bge-m3
+      requires: [ollama]
+      set: {retrieval.mode: hybrid, embedding.backend: ollama, embedding.model: bge-m3}
+    - name: dense-nomic
+      requires: [ollama]
+      set: {retrieval.mode: dense, embedding.backend: ollama, embedding.model: nomic-embed-text, embedding.query_prefix: "search_query: ", embedding.doc_prefix: "search_document: "}
+    - name: dense-qwen3-embedding
+      requires: [ollama]
+      set: {retrieval.mode: dense, embedding.backend: ollama, embedding.model: "qwen3-embedding:0.6b", embedding.query_prefix: "Instruct: Given a question about the Odoo Inventory app, retrieve documentation passages that answer it\nQuery: "}
+
+rrf:
+  description: Hybrid fusion - RRF constant k and depth of each retriever list
+  kind: retrieval
+  focus: final.mrr
+  langs: [en]
+  grid:
+    retrieval.rrf_k: [10, 60, 100]
+    retrieval.candidates_per_retriever: [20, 50, 100]
+
+topk:
+  description: Retriever Top-K (candidates given to the reranker) with and without a reranker
+  kind: retrieval
+  focus: final.mrr
+  langs: [en]
+  grid:
+    retrieval.top_k: [5, 10, 20, 50]
+    reranker.backend: [none, maxsim]
+
+reranker:
+  description: Reranker over the hybrid Top-20 -> Top-5
+  kind: retrieval
+  focus: final.mrr
+  langs: [en, ru]
+  variants:
+    - name: none
+      set: {reranker.backend: none}
+    - name: bi_encoder-minilm
+      set: {reranker.backend: bi_encoder}
+    - name: maxsim-minilm
+      set: {reranker.backend: maxsim}
+    - name: cross_encoder
+      requires: [sentence_transformers]
+      set: {reranker.backend: cross_encoder, reranker.model: "${RERANK_MODEL}"}
+    - name: llm-pointwise
+      requires: [ollama]
+      set: {reranker.backend: llm, reranker.model: "${LLM_MODEL}"}
+
+threshold:
+  description: Similarity threshold in the filter - fewer wrong contexts vs. lost answers
+  kind: retrieval
+  focus: refusal
+  langs: [en]
+  grid:
+    filters.min_score: [null, 0.4, 0.5, 0.55, 0.6, 0.65]
+
+query_language:
+  description: Russian questions over English documents - multilingual embeddings vs. translation
+  kind: retrieval
+  focus: final.mrr
+  langs: [en, ru]
+  variants:
+    - name: hybrid-minilm
+      set: {}
+    - name: hybrid-minilm+translate
+      requires: [ollama]
+      set: {retrieval.translate_query: true}
+    - name: hybrid-bge-m3
+      requires: [ollama]
+      set: {embedding.backend: ollama, embedding.model: bge-m3}
+    - name: hybrid-bge-m3+translate
+      requires: [ollama]
+      set: {embedding.backend: ollama, embedding.model: bge-m3, retrieval.translate_query: true}
+
+vectorstore:
+  description: Vector index - FAISS exact (flat) vs FAISS HNSW vs Qdrant
+  kind: retrieval
+  focus: latency
+  langs: [en]
+  base: {retrieval.mode: dense}
+  variants:
+    - name: faiss-flat
+      set: {vectorstore.backend: faiss, vectorstore.index_type: flat}
+    - name: faiss-hnsw
+      set: {vectorstore.backend: faiss, vectorstore.index_type: hnsw}
+    - name: qdrant-local
+      requires: [qdrant]
+      set: {vectorstore.backend: qdrant}
+
+generation:
+  description: LLM x prompt (strict grounding rules vs basic) and the extractive no-LLM baseline
+  kind: generation
+  focus: behaviour_accuracy
+  langs: [en, ru]
+  judge: true
+  base: {filters.min_score: 0.55}
+  variants:
+    - name: extractive
+      set: {generation.backend: extractive}
+    - name: llm-basic
+      requires: [ollama]
+      set: {generation.backend: ollama, generation.model: "${LLM_MODEL}", generation.prompt: basic}
+    - name: llm-strict
+      requires: [ollama]
+      set: {generation.backend: ollama, generation.model: "${LLM_MODEL}", generation.prompt: strict}
+    - name: llm-alt-basic
+      requires: [ollama]
+      set: {generation.backend: ollama, generation.model: "${LLM_MODEL_ALT}", generation.prompt: basic}
+    - name: llm-alt-strict
+      requires: [ollama]
+      set: {generation.backend: ollama, generation.model: "${LLM_MODEL_ALT}", generation.prompt: strict}
+
+context:
+  description: How much context the LLM gets - Top-N chunks x character budget
+  kind: generation
+  focus: keyword_coverage
+  langs: [en]
+  base: {filters.min_score: 0.55, generation.backend: ollama, generation.prompt: strict}
+  requires: [ollama]
+  grid:
+    reranker.top_n: [3, 5, 8]
+    generation.max_context_chars: [3000, 6000]
