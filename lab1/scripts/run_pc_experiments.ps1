@@ -31,6 +31,8 @@ if ($Limit -gt 0) { $limitArgs = @("--limit", "$Limit") }
 & $py run.py experiment retrieval --only "dense-bge-m3,hybrid-bge-m3,dense-nomic,dense-qwen3-embedding" @limitArgs
 & $py run.py experiment query_language --only "hybrid-minilm+translate,hybrid-bge-m3,hybrid-bge-m3+translate" @limitArgs
 & $py run.py experiment reranker --only "cross_encoder,llm-pointwise" @limitArgs
+# refusal threshold calibrated for bge-m3 (the MiniLM thresholds do not transfer)
+& $py run.py experiment threshold_bge_m3 @limitArgs
 # answers: two LLMs x two prompts (+ judge), then the context-size experiment
 & $py run.py experiment generation @limitArgs
 & $py run.py experiment context @limitArgs
