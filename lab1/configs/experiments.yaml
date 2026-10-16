@@ -12,6 +12,8 @@
 # requires: ollama | sentence_transformers | qdrant - variants are skipped (and marked as
 #           skipped in the results) when the resource is not available.
 # ${LLM_MODEL}, ${LLM_MODEL_ALT}, ${EMBED_MODEL}, ${RERANK_MODEL} are taken from .env.
+# Experiments on components BEFORE the reranker set reranker.backend=none, otherwise the
+# reranker hides differences between retrievers / chunkings (measured: MRR ~1.0 everywhere).
 # Results are merged by (variant, lang): re-running on another machine only replaces
 # the rows it actually ran.
 
@@ -20,7 +22,7 @@ chunking:
   kind: retrieval
   focus: final.evidence@ctx
   langs: [en]
-  base: {reranker.top_n: 20, generation.max_context_chars: 4000}
+  base: {reranker.backend: none, reranker.top_n: 20, generation.max_context_chars: 4000}
   grid:
     chunking.strategy: [fixed, paragraph, section]
     chunking.max_chars: [500, 1000, 1500, 2000]
@@ -33,7 +35,7 @@ overlap:
   kind: retrieval
   focus: final.evidence@ctx
   langs: [en]
-  base: {chunking.strategy: fixed_overlap, chunking.max_chars: 1000, reranker.top_n: 20, generation.max_context_chars: 4000}
+  base: {reranker.backend: none, chunking.strategy: fixed_overlap, chunking.max_chars: 1000, reranker.top_n: 20, generation.max_context_chars: 4000}
   grid:
     chunking.overlap: [0, 100, 200, 300]
 
@@ -42,6 +44,7 @@ header:
   kind: retrieval
   focus: final.mrr
   langs: [en]
+  base: {reranker.backend: none}
   grid:
     chunking.add_header: [true, false]
     retrieval.mode: [dense, bm25, hybrid]
@@ -51,6 +54,7 @@ retrieval:
   kind: retrieval
   focus: final.mrr
   langs: [en, ru]
+  base: {reranker.backend: none}
   variants:
     - name: bm25
       set: {retrieval.mode: bm25, embedding.backend: none}
@@ -80,6 +84,7 @@ rrf:
   kind: retrieval
   focus: final.mrr
   langs: [en]
+  base: {reranker.backend: none}
   grid:
     retrieval.rrf_k: [10, 60, 100]
     retrieval.candidates_per_retriever: [20, 50, 100]
@@ -117,6 +122,7 @@ threshold:
   kind: retrieval
   focus: refusal
   langs: [en]
+  base: {reranker.backend: none}
   grid:
     filters.min_score: [null, 0.4, 0.5, 0.55, 0.6, 0.65]
 
@@ -125,6 +131,7 @@ query_language:
   kind: retrieval
   focus: final.mrr
   langs: [en, ru]
+  base: {reranker.backend: none}
   variants:
     - name: hybrid-minilm
       set: {}
@@ -143,7 +150,7 @@ vectorstore:
   kind: retrieval
   focus: latency
   langs: [en]
-  base: {retrieval.mode: dense}
+  base: {reranker.backend: none, retrieval.mode: dense}
   variants:
     - name: faiss-flat
       set: {vectorstore.backend: faiss, vectorstore.index_type: flat}
@@ -159,10 +166,11 @@ generation:
   focus: behaviour_accuracy
   langs: [en, ru]
   judge: true
-  base: {filters.min_score: 0.55}
   variants:
     - name: extractive
       set: {generation.backend: extractive}
+    - name: extractive+threshold
+      set: {generation.backend: extractive, reranker.min_score: 0.66}
     - name: llm-basic
       requires: [ollama]
       set: {generation.backend: ollama, generation.model: "${LLM_MODEL}", generation.prompt: basic}
@@ -181,7 +189,7 @@ context:
   kind: generation
   focus: keyword_coverage
   langs: [en]
-  base: {filters.min_score: 0.55, generation.backend: ollama, generation.prompt: strict}
+  base: {generation.backend: ollama, generation.prompt: strict}
   requires: [ollama]
   grid:
     reranker.top_n: [3, 5, 8]
@@ -202,6 +210,6 @@ threshold_bge_m3:
   focus: refusal
   langs: [en, ru]
   requires: [ollama]
-  base: {embedding.backend: ollama, embedding.model: bge-m3}
+  base: {reranker.backend: none, embedding.backend: ollama, embedding.model: bge-m3}
   grid:
     filters.min_score: [null, 0.4, 0.45, 0.5, 0.55, 0.6]

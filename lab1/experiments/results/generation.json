@@ -1,0 +1,428 @@
+{
+  "experiment": "generation",
+  "description": "LLM x prompt (strict grounding rules vs basic) and the extractive no-LLM baseline",
+  "kind": "generation",
+  "focus": "behaviour_accuracy",
+  "updated_at": "2026-10-16T23:04:13Z",
+  "questions": 47,
+  "machine": {
+    "platform": "Linux-6.18.44-fc-v139-x86_64-with-glibc2.39",
+    "python": "3.13.16",
+    "processor": "x86_64"
+  },
+  "base_config": {
+    "source": {
+      "name": "odoo-docs",
+      "include": [
+        "content/applications/inventory_and_mrp/inventory",
+        "content/applications/inventory_and_mrp/barcode"
+      ],
+      "extensions": [
+        ".rst"
+      ],
+      "id_prefix": "content/applications/inventory_and_mrp/",
+      "doc_base_url": "https://www.odoo.com/documentation/{branch}",
+      "git_timeout": 300,
+      "retries": 3
+    },
+    "processing": {
+      "version": 1,
+      "keep_image_alt": false,
+      "keep_seealso": true,
+      "min_doc_chars": 200
+    },
+    "chunking": {
+      "strategy": "section",
+      "max_chars": 1000,
+      "overlap": 0,
+      "min_chars": 100,
+      "add_header": true
+    },
+    "embedding": {
+      "backend": "minilm",
+      "model": null,
+      "dim": 256,
+      "batch_size": 32,
+      "query_prefix": "",
+      "doc_prefix": ""
+    },
+    "vectorstore": {
+      "backend": "faiss",
+      "index_type": "flat",
+      "hnsw_m": 32,
+      "qdrant_url": null
+    },
+    "retrieval": {
+      "mode": "hybrid",
+      "top_k": 20,
+      "rrf_k": 60,
+      "candidates_per_retriever": 50,
+      "bm25": {
+        "k1": 1.5,
+        "b": 0.75,
+        "stem": true
+      },
+      "translate_query": false
+    },
+    "filters": {
+      "enabled": true,
+      "min_score": null,
+      "min_chars": 60,
+      "dedup": true,
+      "near_dup_jaccard": 0.9,
+      "max_per_doc": 3,
+      "modules": []
+    },
+    "reranker": {
+      "backend": "maxsim",
+      "model": null,
+      "top_n": 5,
+      "min_score": null,
+      "batch_size": 16
+    },
+    "generation": {
+      "backend": "ollama",
+      "model": null,
+      "prompt": "strict",
+      "max_context_chars": 6000,
+      "answer_language": "auto",
+      "max_tokens": 700
+    }
+  },
+  "rows": [
+    {
+      "variant": "extractive",
+      "lang": "en",
+      "overrides": {
+        "generation.backend": "extractive"
+      },
+      "index": {
+        "key": "p1__section-1000-o0-m100__h1__minilm",
+        "chunks": 938,
+        "chars_mean": 577.7,
+        "embedder": "all-MiniLM-L6-v2",
+        "embed_seconds": 26.91,
+        "truncated_inputs": 7,
+        "load_or_build_seconds": 0.0
+      },
+      "config_fingerprint": "a05444ffe735",
+      "summary": {
+        "questions": 47,
+        "behaviour_accuracy": 0.8298,
+        "no_answer_refused": 0.0,
+        "false_refusals": 0.0,
+        "keyword_coverage": 0.6474,
+        "citation_rate": 1.0,
+        "citation_precision": 0.8077,
+        "latency_ms": {
+          "mean": 463.5,
+          "p50": 468.2,
+          "p95": 656.8
+        },
+        "generate_ms": {
+          "mean": 0.8723,
+          "p50": 0.8,
+          "p95": 1.1
+        },
+        "by_type": {
+          "contextual": {
+            "n": 8,
+            "behaviour_accuracy": 1.0,
+            "keyword_coverage": 0.4375
+          },
+          "factoid": {
+            "n": 12,
+            "behaviour_accuracy": 1.0,
+            "keyword_coverage": 0.7083
+          },
+          "multi_doc": {
+            "n": 8,
+            "behaviour_accuracy": 1.0,
+            "keyword_coverage": 0.5938
+          },
+          "no_answer": {
+            "n": 8,
+            "behaviour_accuracy": 0.0,
+            "keyword_coverage": null
+          },
+          "specific": {
+            "n": 11,
+            "behaviour_accuracy": 1.0,
+            "keyword_coverage": 0.7727
+          }
+        }
+      }
+    },
+    {
+      "variant": "extractive",
+      "lang": "ru",
+      "overrides": {
+        "generation.backend": "extractive"
+      },
+      "index": {
+        "key": "p1__section-1000-o0-m100__h1__minilm",
+        "chunks": 938,
+        "chars_mean": 577.7,
+        "embedder": "all-MiniLM-L6-v2",
+        "embed_seconds": 26.91,
+        "truncated_inputs": 7,
+        "load_or_build_seconds": 0.0
+      },
+      "config_fingerprint": "a05444ffe735",
+      "summary": {
+        "questions": 47,
+        "behaviour_accuracy": 0.4468,
+        "no_answer_refused": 0.5,
+        "false_refusals": 0.5641,
+        "keyword_coverage": 0.4363,
+        "citation_rate": 1.0,
+        "citation_precision": 0.5686,
+        "latency_ms": {
+          "mean": 553.2128,
+          "p50": 547.0,
+          "p95": 735.8
+        },
+        "generate_ms": {
+          "mean": 0.9702,
+          "p50": 0.8,
+          "p95": 1.5
+        },
+        "by_type": {
+          "contextual": {
+            "n": 8,
+            "behaviour_accuracy": 0.25,
+            "keyword_coverage": 0.5
+          },
+          "factoid": {
+            "n": 12,
+            "behaviour_accuracy": 0.4167,
+            "keyword_coverage": 0.4
+          },
+          "multi_doc": {
+            "n": 8,
+            "behaviour_accuracy": 0.625,
+            "keyword_coverage": 0.4833
+          },
+          "no_answer": {
+            "n": 8,
+            "behaviour_accuracy": 0.5,
+            "keyword_coverage": null
+          },
+          "specific": {
+            "n": 11,
+            "behaviour_accuracy": 0.4545,
+            "keyword_coverage": 0.4
+          }
+        }
+      }
+    },
+    {
+      "variant": "extractive+threshold",
+      "lang": "en",
+      "overrides": {
+        "generation.backend": "extractive",
+        "reranker.min_score": 0.66
+      },
+      "index": {
+        "key": "p1__section-1000-o0-m100__h1__minilm",
+        "chunks": 938,
+        "chars_mean": 577.7,
+        "embedder": "all-MiniLM-L6-v2",
+        "embed_seconds": 26.91,
+        "truncated_inputs": 7,
+        "load_or_build_seconds": 0.0
+      },
+      "config_fingerprint": "b1c00e63acd0",
+      "summary": {
+        "questions": 47,
+        "behaviour_accuracy": 0.8936,
+        "no_answer_refused": 0.875,
+        "false_refusals": 0.1026,
+        "keyword_coverage": 0.769,
+        "citation_rate": 1.0,
+        "citation_precision": 0.881,
+        "latency_ms": {
+          "mean": 469.2426,
+          "p50": 463.3,
+          "p95": 648.7
+        },
+        "generate_ms": {
+          "mean": 0.5583,
+          "p50": 0.5,
+          "p95": 1.0
+        },
+        "by_type": {
+          "contextual": {
+            "n": 8,
+            "behaviour_accuracy": 0.625,
+            "keyword_coverage": 0.6
+          },
+          "factoid": {
+            "n": 12,
+            "behaviour_accuracy": 0.9167,
+            "keyword_coverage": 0.8636
+          },
+          "multi_doc": {
+            "n": 8,
+            "behaviour_accuracy": 1.0,
+            "keyword_coverage": 0.6771
+          },
+          "no_answer": {
+            "n": 8,
+            "behaviour_accuracy": 0.875,
+            "keyword_coverage": null
+          },
+          "specific": {
+            "n": 11,
+            "behaviour_accuracy": 1.0,
+            "keyword_coverage": 0.8182
+          }
+        }
+      }
+    },
+    {
+      "variant": "extractive+threshold",
+      "lang": "ru",
+      "overrides": {
+        "generation.backend": "extractive",
+        "reranker.min_score": 0.66
+      },
+      "index": {
+        "key": "p1__section-1000-o0-m100__h1__minilm",
+        "chunks": 938,
+        "chars_mean": 577.7,
+        "embedder": "all-MiniLM-L6-v2",
+        "embed_seconds": 26.91,
+        "truncated_inputs": 7,
+        "load_or_build_seconds": 0.0
+      },
+      "config_fingerprint": "b1c00e63acd0",
+      "summary": {
+        "questions": 47,
+        "behaviour_accuracy": 0.1702,
+        "no_answer_refused": 1.0,
+        "false_refusals": 1.0,
+        "keyword_coverage": null,
+        "citation_rate": null,
+        "citation_precision": null,
+        "latency_ms": {
+          "mean": 521.2468,
+          "p50": 495.9,
+          "p95": 718.4
+        },
+        "generate_ms": {
+          "mean": null,
+          "p50": null,
+          "p95": null
+        },
+        "by_type": {
+          "contextual": {
+            "n": 8,
+            "behaviour_accuracy": 0.0,
+            "keyword_coverage": null
+          },
+          "factoid": {
+            "n": 12,
+            "behaviour_accuracy": 0.0,
+            "keyword_coverage": null
+          },
+          "multi_doc": {
+            "n": 8,
+            "behaviour_accuracy": 0.0,
+            "keyword_coverage": null
+          },
+          "no_answer": {
+            "n": 8,
+            "behaviour_accuracy": 1.0,
+            "keyword_coverage": null
+          },
+          "specific": {
+            "n": 11,
+            "behaviour_accuracy": 0.0,
+            "keyword_coverage": null
+          }
+        }
+      }
+    },
+    {
+      "variant": "llm-basic",
+      "lang": "en",
+      "overrides": {
+        "generation.backend": "ollama",
+        "generation.model": "qwen3.5:4b",
+        "generation.prompt": "basic"
+      },
+      "skipped": "Ollama not reachable at http://localhost:11434"
+    },
+    {
+      "variant": "llm-basic",
+      "lang": "ru",
+      "overrides": {
+        "generation.backend": "ollama",
+        "generation.model": "qwen3.5:4b",
+        "generation.prompt": "basic"
+      },
+      "skipped": "Ollama not reachable at http://localhost:11434"
+    },
+    {
+      "variant": "llm-strict",
+      "lang": "en",
+      "overrides": {
+        "generation.backend": "ollama",
+        "generation.model": "qwen3.5:4b",
+        "generation.prompt": "strict"
+      },
+      "skipped": "Ollama not reachable at http://localhost:11434"
+    },
+    {
+      "variant": "llm-strict",
+      "lang": "ru",
+      "overrides": {
+        "generation.backend": "ollama",
+        "generation.model": "qwen3.5:4b",
+        "generation.prompt": "strict"
+      },
+      "skipped": "Ollama not reachable at http://localhost:11434"
+    },
+    {
+      "variant": "llm-alt-basic",
+      "lang": "en",
+      "overrides": {
+        "generation.backend": "ollama",
+        "generation.model": "qwen3.5:9b",
+        "generation.prompt": "basic"
+      },
+      "skipped": "Ollama not reachable at http://localhost:11434"
+    },
+    {
+      "variant": "llm-alt-basic",
+      "lang": "ru",
+      "overrides": {
+        "generation.backend": "ollama",
+        "generation.model": "qwen3.5:9b",
+        "generation.prompt": "basic"
+      },
+      "skipped": "Ollama not reachable at http://localhost:11434"
+    },
+    {
+      "variant": "llm-alt-strict",
+      "lang": "en",
+      "overrides": {
+        "generation.backend": "ollama",
+        "generation.model": "qwen3.5:9b",
+        "generation.prompt": "strict"
+      },
+      "skipped": "Ollama not reachable at http://localhost:11434"
+    },
+    {
+      "variant": "llm-alt-strict",
+      "lang": "ru",
+      "overrides": {
+        "generation.backend": "ollama",
+        "generation.model": "qwen3.5:9b",
+        "generation.prompt": "strict"
+      },
+      "skipped": "Ollama not reachable at http://localhost:11434"
+    }
+  ]
+}

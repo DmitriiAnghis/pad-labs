@@ -34,7 +34,7 @@ filters:
   near_dup_jaccard: 0.9
   max_per_doc: 3
 reranker:
-  backend: none
+  backend: maxsim
   top_n: 5
   min_score: null
 generation:

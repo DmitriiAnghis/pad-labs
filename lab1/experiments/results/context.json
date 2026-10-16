@@ -1,0 +1,148 @@
+{
+  "experiment": "context",
+  "description": "How much context the LLM gets - Top-N chunks x character budget",
+  "kind": "generation",
+  "focus": "keyword_coverage",
+  "updated_at": "2026-10-16T23:04:13Z",
+  "questions": 47,
+  "machine": {
+    "platform": "Linux-6.18.44-fc-v139-x86_64-with-glibc2.39",
+    "python": "3.13.16",
+    "processor": "x86_64"
+  },
+  "base_config": {
+    "source": {
+      "name": "odoo-docs",
+      "include": [
+        "content/applications/inventory_and_mrp/inventory",
+        "content/applications/inventory_and_mrp/barcode"
+      ],
+      "extensions": [
+        ".rst"
+      ],
+      "id_prefix": "content/applications/inventory_and_mrp/",
+      "doc_base_url": "https://www.odoo.com/documentation/{branch}",
+      "git_timeout": 300,
+      "retries": 3
+    },
+    "processing": {
+      "version": 1,
+      "keep_image_alt": false,
+      "keep_seealso": true,
+      "min_doc_chars": 200
+    },
+    "chunking": {
+      "strategy": "section",
+      "max_chars": 1000,
+      "overlap": 0,
+      "min_chars": 100,
+      "add_header": true
+    },
+    "embedding": {
+      "backend": "minilm",
+      "model": null,
+      "dim": 256,
+      "batch_size": 32,
+      "query_prefix": "",
+      "doc_prefix": ""
+    },
+    "vectorstore": {
+      "backend": "faiss",
+      "index_type": "flat",
+      "hnsw_m": 32,
+      "qdrant_url": null
+    },
+    "retrieval": {
+      "mode": "hybrid",
+      "top_k": 20,
+      "rrf_k": 60,
+      "candidates_per_retriever": 50,
+      "bm25": {
+        "k1": 1.5,
+        "b": 0.75,
+        "stem": true
+      },
+      "translate_query": false
+    },
+    "filters": {
+      "enabled": true,
+      "min_score": null,
+      "min_chars": 60,
+      "dedup": true,
+      "near_dup_jaccard": 0.9,
+      "max_per_doc": 3,
+      "modules": []
+    },
+    "reranker": {
+      "backend": "maxsim",
+      "model": null,
+      "top_n": 5,
+      "min_score": null,
+      "batch_size": 16
+    },
+    "generation": {
+      "backend": "ollama",
+      "model": null,
+      "prompt": "strict",
+      "max_context_chars": 6000,
+      "answer_language": "auto",
+      "max_tokens": 700
+    }
+  },
+  "rows": [
+    {
+      "variant": "top_n=3,max_context_chars=3000",
+      "lang": "en",
+      "overrides": {
+        "reranker.top_n": 3,
+        "generation.max_context_chars": 3000
+      },
+      "skipped": "Ollama not reachable at http://localhost:11434"
+    },
+    {
+      "variant": "top_n=3,max_context_chars=6000",
+      "lang": "en",
+      "overrides": {
+        "reranker.top_n": 3,
+        "generation.max_context_chars": 6000
+      },
+      "skipped": "Ollama not reachable at http://localhost:11434"
+    },
+    {
+      "variant": "top_n=5,max_context_chars=3000",
+      "lang": "en",
+      "overrides": {
+        "reranker.top_n": 5,
+        "generation.max_context_chars": 3000
+      },
+      "skipped": "Ollama not reachable at http://localhost:11434"
+    },
+    {
+      "variant": "top_n=5,max_context_chars=6000",
+      "lang": "en",
+      "overrides": {
+        "reranker.top_n": 5,
+        "generation.max_context_chars": 6000
+      },
+      "skipped": "Ollama not reachable at http://localhost:11434"
+    },
+    {
+      "variant": "top_n=8,max_context_chars=3000",
+      "lang": "en",
+      "overrides": {
+        "reranker.top_n": 8,
+        "generation.max_context_chars": 3000
+      },
+      "skipped": "Ollama not reachable at http://localhost:11434"
+    },
+    {
+      "variant": "top_n=8,max_context_chars=6000",
+      "lang": "en",
+      "overrides": {
+        "reranker.top_n": 8,
+        "generation.max_context_chars": 6000
+      },
+      "skipped": "Ollama not reachable at http://localhost:11434"
+    }
+  ]
+}
