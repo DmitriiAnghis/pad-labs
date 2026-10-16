@@ -131,7 +131,7 @@ def cmd_serve(args) -> int:
     import uvicorn
 
     settings = Settings.from_env()
-    uvicorn.run("api.app:app", host=args.host or settings.api_host, port=args.port or settings.api_port, log_config=None)
+    uvicorn.run("api.app:app", host=args.host or settings.api_host, port=args.port or settings.api_port, log_config=None, access_log=False)
     return 0
 
 
