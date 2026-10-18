@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import logging
 import threading
+import json
+import os
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -84,6 +86,8 @@ class State:
             from pipeline.rag import RagPipeline
 
             config = load_pipeline_config(self.settings.config_path, self.settings)
+            if os.environ.get("RAG_OVERRIDES"):  # set by `run.py serve --set ...`
+                config = config.with_overrides(json.loads(os.environ["RAG_OVERRIDES"]))
             start = time.perf_counter()
             self.pipeline = RagPipeline.from_config(self.settings, config)
             log_event(log, "pipeline ready", index=self.pipeline.index.key, chunks=len(self.pipeline.index.chunks),

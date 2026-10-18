@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import logging
 import sys
 
@@ -130,6 +131,12 @@ def cmd_ask(args) -> int:
 def cmd_serve(args) -> int:
     import uvicorn
 
+    # uvicorn imports the app itself, so --config / --set reach it through the environment
+    if getattr(args, "config", None):
+        os.environ["RAG_CONFIG"] = args.config
+    overrides = _parse_set(getattr(args, "set", None))
+    if overrides:
+        os.environ["RAG_OVERRIDES"] = json.dumps(overrides)
     settings = Settings.from_env()
     uvicorn.run("api.app:app", host=args.host or settings.api_host, port=args.port or settings.api_port, log_config=None, access_log=False)
     return 0
