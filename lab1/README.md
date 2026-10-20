@@ -68,7 +68,7 @@ RAG-система, которая отвечает на вопросы по д�
 | Язык | Python 3.11+ | экосистема ML, FastAPI |
 | Сбор | `git` (sparse, shallow, blob-less clone) | blob SHA = готовый детектор изменений, без API-лимитов GitHub |
 | Парсинг | собственный RST-парсер | docutils/Sphinx падают на ролях Odoo и теряют структуру секций |
-| Embeddings | all-MiniLM-L6-v2 (384, EN) через ONNX Runtime; TF-IDF+LSA (256); bge-m3 (1024, мультиязычная) через Ollama | MiniLM работает на любом CPU без PyTorch; bge-m3 нужна для русских вопросов |
+| Embeddings | **qwen3-embedding:0.6b** (1024, мультиязычная) через Ollama — по умолчанию; all-MiniLM-L6-v2 (384, EN, ONNX) и TF-IDF+LSA (256) как альтернативы | на русских вопросах MRR 0.42 → 0.91 при том же английском (1.0 с reranker) |
 | Векторное хранилище | FAISS `IndexFlatIP` | ~1 000 векторов: точный поиск < 1 мс; Qdrant поддержан для лаб 2–3 |
 | Лексический поиск | свой BM25 + Snowball-стемминг | точные термины (SGTIN-96, FEFO, названия меню) |
 | Fusion | Reciprocal Rank Fusion | не требует калибровки разных шкал score |
@@ -96,11 +96,12 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 Copy-Item .env.example .env          # проверить OLLAMA_URL и имена моделей (ollama list)
-python run.py models download minilm # ~90 МБ, один раз
+ollama pull qwen3.5:4b               # LLM для ответов
+ollama pull qwen3-embedding:0.6b     # мультиязычные embeddings (индекс по умолчанию)
+python run.py models download minilm # ~90 МБ, один раз (reranker MaxSim)
 python run.py grab                   # скачать / обновить документацию
 python run.py process                # RST -> чистые структурированные документы
-python run.py index                  # chunks + embeddings + FAISS + BM25
-ollama pull qwen3.5:4b               # LLM для ответов
+python run.py index                  # chunks + embeddings + FAISS + BM25 (нужна запущенная Ollama)
 ```
 
 ## 5. Запуск

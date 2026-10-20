@@ -16,7 +16,9 @@ chunking:
   min_chars: 100
   add_header: true
 embedding:
-  backend: minilm
+  # multilingual (RU questions over EN docs), served by Ollama: ollama pull qwen3-embedding:0.6b
+  backend: ollama
+  model: qwen3-embedding:0.6b
 vectorstore:
   backend: faiss
   index_type: flat
@@ -36,6 +38,8 @@ filters:
 reranker:
   backend: maxsim
   top_n: 5
+  # MaxSim uses English MiniLM: applied to English questions only
+  languages: [en]
   min_score: null
 generation:
   backend: ollama
