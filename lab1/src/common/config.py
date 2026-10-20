@@ -228,6 +228,9 @@ class RerankerConfig(BaseModel):
     top_n: int = 5
     min_score: Optional[float] = None  # threshold on reranker score; nothing left -> refusal
     batch_size: int = 16
+    # query languages the reranker is applied to; MiniLM-based rerankers are English-only and
+    # make Russian rankings worse, so other languages keep the retriever order. Empty = all.
+    languages: list[str] = Field(default_factory=list)
 
 
 class GenerationConfig(BaseModel):

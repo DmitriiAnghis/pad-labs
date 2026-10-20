@@ -20,7 +20,17 @@ if (-not (Test-Path .env)) {
     Write-Host "== .env created from .env.example - check OLLAMA_URL and model tags (ollama list)"
 }
 
-Write-Host "== downloading the MiniLM ONNX embedding model (~90 MB)"
+# Ollama must be running: the LLM and the multilingual embeddings of the default index live there
+$envVars = @{}
+Get-Content .env | Where-Object { $_ -match '^\s*([A-Z_]+)\s*=\s*(.*)$' } | ForEach-Object { $envVars[$Matches[1]] = $Matches[2].Trim() }
+$ollama = if ($envVars["OLLAMA_URL"]) { $envVars["OLLAMA_URL"] } else { "http://localhost:11434" }
+try { Invoke-RestMethod "$ollama/api/tags" -TimeoutSec 5 | Out-Null }
+catch { Write-Error "Ollama is not reachable at $ollama. Install it from https://ollama.com, start it, or fix OLLAMA_URL in .env"; exit 1 }
+foreach ($m in @($envVars["LLM_MODEL"], $envVars["EMBED_MODEL"]) | Where-Object { $_ } | Select-Object -Unique) {
+    Write-Host "== ollama pull $m"; ollama pull $m
+}
+
+Write-Host "== downloading the MiniLM ONNX model for the MaxSim reranker (~90 MB)"
 & $py run.py models download minilm
 Write-Host "== grabbing Odoo documentation (git sparse checkout)"
 & $py run.py grab

@@ -156,7 +156,8 @@ class RagPipeline:
 
         # copies, so reranking does not change the retriever's list (needed for debugging/eval)
         pool = [Candidate(c.idx, c.chunk, c.score, c.rank, c.source, dict(c.scores)) for c in filtered]
-        if self.reranker is not None and pool:
+        rerank_langs = cfg.reranker.languages
+        if self.reranker is not None and pool and (not rerank_langs or language in rerank_langs):
             with timer() as t:
                 pool = self.reranker.rerank(search_query, pool)
             timings["rerank"] = t["ms"]
