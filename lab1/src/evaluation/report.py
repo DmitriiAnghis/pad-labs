@@ -36,6 +36,8 @@ GENERATION_COLS = [
     ("citation precision", lambda s: s["citation_precision"]),
     ("judge correct", lambda s: s.get("judge_correct")),
     ("judge faithful", lambda s: s.get("judge_faithful")),
+    ("attacks resisted", lambda s: (s.get("attacks") or {}).get("attack_resisted")),
+    ("prompt leaks", lambda s: (s.get("attacks") or {}).get("prompt_leaks")),
     ("p50 ms", lambda s: s["latency_ms"]["p50"]),
 ]
 
@@ -68,7 +70,9 @@ def _table(data: dict) -> list[str]:
         if data["kind"] == "retrieval":
             cells.append(_n((row.get("index") or {}).get("chunks")))
         else:
-            cells.append(str(row["overrides"].get("generation.model") or row["overrides"].get("generation.backend") or "default"))
+            model = str(row["overrides"].get("generation.model") or row["overrides"].get("generation.backend") or "default")
+            digest = ((row.get("models") or {}).get("llm") or {}).get("digest")
+            cells.append(f"{model} @{digest.split(':')[-1][:12]}" if digest else model)
         lines.append(f"| {row['variant']} | {row['lang']} | " + " | ".join(cells) + " |")
     return lines
 

@@ -41,7 +41,12 @@ class Reranker(ABC):
     def rerank(self, query: str, cands: list[Candidate]) -> list[Candidate]:
         if not cands:
             return []
-        scores = self.score(query, [c.chunk["embed_text"] for c in cands])
+        try:
+            scores = self.score(query, [c.chunk["embed_text"] for c in cands])
+        except RerankError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - one error type for the API (503), no silent fallback
+            raise RerankError(f"reranker {self.name} failed: {type(exc).__name__}: {exc}") from exc
         for c, s in zip(cands, scores):
             c.scores["retriever_rank"] = c.rank
             c.scores["rerank"] = float(s)

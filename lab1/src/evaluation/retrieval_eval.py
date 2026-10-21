@@ -110,6 +110,9 @@ def run_retrieval_eval(settings: Settings, config: PipelineConfig, lang: str = "
     pipeline = RagPipeline.from_config(settings, config)
     result = evaluate_retrieval(pipeline, questions, lang, ks)
     path = settings.runs_dir / f"retrieval_{lang}_{utc_now().replace(':', '').replace('-', '')[:15]}.json"
-    write_json(path, {"config": config.model_dump(), "index": pipeline.index.meta, **result})
+    from common.versions import environment, model_versions
+
+    write_json(path, {"config": config.model_dump(), "index": pipeline.index.meta, "environment": environment(settings),
+                      "models": model_versions(settings, config), **result})
     result["path"] = str(path)
     return result

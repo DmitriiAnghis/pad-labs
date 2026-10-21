@@ -36,5 +36,7 @@ if ($Limit -gt 0) { $limitArgs = @("--limit", "$Limit") }
 # answers: two LLMs x two prompts (+ judge), then the context-size experiment
 & $py run.py experiment generation @limitArgs
 & $py run.py experiment context @limitArgs
+# prompt injection: basic / strict without rule 6 / strict, attacks in the question and in a passage
+& $py run.py experiment injection @limitArgs
 & $py run.py report
 Write-Host "Done: see experiments\REPORT.md"

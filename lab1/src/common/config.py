@@ -61,6 +61,7 @@ class Settings(BaseModel):
     api_port: int
     log_level: str
     log_format: str
+    history_enabled: bool = True
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -89,6 +90,7 @@ class Settings(BaseModel):
             api_port=int(_env("API_PORT", "8000")),
             log_level=_env("LOG_LEVEL", "INFO").upper(),
             log_format=_env("LOG_FORMAT", "text").lower(),
+            history_enabled=_env_bool("HISTORY_ENABLED") is not False,
         )
 
     # Well-known sub-directories of DATA_DIR
@@ -127,6 +129,10 @@ class Settings(BaseModel):
     @property
     def runs_dir(self) -> Path:
         return self.data_dir / "runs"
+
+    @property
+    def history_dir(self) -> Path:
+        return self.data_dir / "history"
 
 
 # ---------------------------------------------------------------- pipeline config
@@ -233,7 +239,7 @@ class RerankerConfig(BaseModel):
 class GenerationConfig(BaseModel):
     backend: Literal["ollama", "extractive"] = "ollama"
     model: Optional[str] = None  # default LLM_MODEL
-    prompt: Literal["basic", "strict"] = "strict"
+    prompt: Literal["basic", "strict_nodata", "strict"] = "strict"
     max_context_chars: int = 6000
     answer_language: Literal["auto", "en", "ru"] = "auto"
     max_tokens: int = 700
@@ -262,6 +268,15 @@ class PipelineConfig(BaseModel):
 
     def fingerprint(self) -> str:
         payload = json.dumps(self.model_dump(), sort_keys=True, default=str)
+        return hashlib.sha256(payload.encode()).hexdigest()[:12]
+
+    def retrieval_fingerprint(self) -> str:
+        """Everything that decides *which chunks* reach the LLM (generation settings excluded,
+        except the model when it also translates the query). Same value = same contexts."""
+        data = self.model_dump(exclude={"generation"})
+        if self.retrieval.translate_query:
+            data["translator"] = self.generation.model
+        payload = json.dumps(data, sort_keys=True, default=str)
         return hashlib.sha256(payload.encode()).hexdigest()[:12]
 
 

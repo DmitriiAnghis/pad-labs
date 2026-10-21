@@ -22,7 +22,7 @@ from common.utils import detect_language, timer
 from filtering.filters import apply_filters
 from generation.generator import create_generator
 from generation.prompts import REFUSAL, TRANSLATE_PROMPT
-from reranking.rerankers import create_reranker
+from reranking.rerankers import RerankError, create_reranker
 from retrieval.index import RagIndex, build_index
 from retrieval.retriever import Candidate, Retriever
 
@@ -101,7 +101,12 @@ class RagPipeline:
     @property
     def reranker(self):
         if not self._reranker_ready:
-            self._reranker = create_reranker(self.config.reranker, self.settings)
+            try:
+                self._reranker = create_reranker(self.config.reranker, self.settings)
+            except RerankError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - e.g. MiniLM model missing: same error type as a failed call
+                raise RerankError(f"reranker {self.config.reranker.backend} cannot be loaded: {type(exc).__name__}: {exc}") from exc
             self._reranker_ready = True
         return self._reranker
 
@@ -171,9 +176,11 @@ class RagPipeline:
         return RetrievalResult(query, language, search_query, retrieved, filtered, dropped, reranked, timings, query_vec)
 
     # ------------------------------------------------------------------ answer
-    def answer(self, query: str) -> Answer:
+    def answer(self, query: str, retrieval: RetrievalResult | None = None) -> Answer:
+        """``retrieval``: an already computed (saved) search result. Experiments that compare LLMs
+        pass the same one to every variant, so the answers differ only by the model/prompt."""
         with timer() as total:
-            r = self.retrieve(query)
+            r = retrieval if retrieval is not None else self.retrieve(query)
             language = self.config.generation.answer_language
             language = r.language if language == "auto" else language
             timings = dict(r.timings_ms)
@@ -202,5 +209,5 @@ class RagPipeline:
                 if gen.refused:
                     sources = []
                 ans = Answer(query, gen.text, gen.refused, "llm_refused" if gen.refused else None, sources, gen.model, language, timings, r)
-        ans.timings_ms["total"] = total["ms"]
+        ans.timings_ms["total"] = total["ms"] + (sum(r.timings_ms.values()) if retrieval is not None else 0.0)
         return ans

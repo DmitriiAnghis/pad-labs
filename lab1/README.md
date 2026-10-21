@@ -112,6 +112,15 @@ python run.py ask "Как включить волновые перемещени
 python run.py serve                                    # API + веб-страница: http://127.0.0.1:8000
 ```
 
+Ручная оценка ответов на тестовом наборе и проверка защиты от prompt injection:
+
+```powershell
+python run.py eval generation --lang ru                 # ответы на 47 вопросов -> data/runs/generation_ru_*.json
+python run.py rate data\runs\generation_ru_<время>.json  # оценить каждый ответ: "4 incomplete # нет пути в меню"
+python run.py ratings --save                            # сводка -> experiments/results/manual_ratings.json
+python run.py experiment injection                      # 8 атак из data/eval/attacks.jsonl, промпты basic / strict_nodata / strict
+```
+
 Повторный `grab` скачивает только изменившиеся файлы, удалённые помечает `deleted`;
 `process` и `index` пропускают работу, если исходные данные и конфигурация не изменились.
 
@@ -123,7 +132,7 @@ python run.py serve                                    # API + веб-стран
   `OLLAMA_URL`, `LLM_MODEL`, `LLM_MODEL_ALT`, `JUDGE_MODEL`, `EMBED_MODEL`, `OLLAMA_TIMEOUT`,
   `LLM_TEMPERATURE`, `LLM_NUM_CTX`, `LLM_THINK`, `RERANK_MODEL`, `SOURCE_REPO_URL`,
   `SOURCE_BRANCH`, `DATA_DIR`, `RAG_CONFIG`, `API_HOST`, `API_PORT`, `LOG_LEVEL`,
-  `LOG_FORMAT` (`text`/`json`). Шаблон с комментариями — [.env.example](.env.example).
+  `LOG_FORMAT` (`text`/`json`), `HISTORY_ENABLED`. Шаблон с комментариями — [.env.example](.env.example).
   В лабораторных 2–3 это станет ConfigMap/Secret.
 * **`configs/default.yaml`** — параметры конвейера (chunking, embeddings, retrieval, фильтры,
   reranker, генерация). Значения выбраны по результатам экспериментов. Любой параметр можно
@@ -148,12 +157,21 @@ python run.py --config configs\my.yaml ask "..."
 | GET | `/ready` | readiness: индекс загружен и Ollama доступна, иначе 503 |
 | POST | `/ask` | ответ с источниками; `debug: true` добавляет все этапы поиска |
 | POST | `/search` | только поиск: найденные, отброшенные (с причиной) и итоговые chunks |
+| GET | `/history` | последние ответы `/ask` с их ручными оценками |
+| POST | `/history/{answer_id}/rating` | ручная оценка ответа: `score` 1–5, `flags`, `comment` |
+| GET | `/history/summary` | средняя оценка и доля каждого флага по модели/промпту |
 | GET | `/config` | активная конфигурация и статистика индекса (без секретов) |
 | GET | `/` | веб-страница для вопросов |
 
 Каждый ответ содержит заголовок `X-Request-ID`; тот же id есть в каждой строке лога этого
 запроса. Ошибки возвращаются как `{"error": "...", "request_id": "..."}` без stack trace:
-422 — неверный вопрос, 503 — индекс ещё грузится или LLM недоступна, 500 — внутренняя ошибка.
+422 — неверный вопрос, 503 — индекс ещё грузится, LLM или reranker недоступны (без тихой
+подмены порядка), 500 — внутренняя ошибка.
+
+Каждый ответ `/ask` получает `answer_id` и сохраняется в `data/history/answers.jsonl`
+(в Git не попадает, отключается `HISTORY_ENABLED=false`); на веб-странице под ответом есть
+форма оценки. Флаги: `factual_error`, `unsupported`, `incomplete`, `irrelevant`,
+`wrong_refusal`, `bad_citation`.
 
 ## 8. Примеры использования
 

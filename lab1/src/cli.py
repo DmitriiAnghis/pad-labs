@@ -152,7 +152,7 @@ def cmd_eval(args) -> int:
     else:
         from evaluation.generation_eval import run_generation_eval
 
-        result = run_generation_eval(settings, config, lang=args.lang, judge=args.judge, limit=args.limit)
+        result = run_generation_eval(settings, config, lang=args.lang, judge=args.judge, limit=args.limit, questions_file=args.questions)
         print(json.dumps(result["summary"], indent=2, ensure_ascii=False))
         print(f"details: {result.get('path')}")
     return 0
@@ -170,6 +170,75 @@ def cmd_experiment(args) -> int:
     only = [v.strip() for v in args.only.split(",")] if args.only else None
     for name in names:
         run_experiment(settings, name, lang=args.lang, limit=args.limit or None, only=only)
+    return 0
+
+
+def cmd_rate(args) -> int:
+    """Manual rating of the answers of a generation run (eval or experiment detail file)."""
+    import hashlib
+    from pathlib import Path
+
+    from common.utils import read_json, read_jsonl
+    from history.store import FLAGS, AnswerHistory, HistoryError
+
+    settings = Settings.from_env()
+    path = Path(args.run)
+    run = read_json(path, default=None)
+    if not run or "rows" not in run:
+        raise SystemExit(f"{path} is not a generation run file (expected keys config + rows)")
+    questions = {q["id"]: q for f in ("questions.jsonl", "attacks.jsonl") for q in read_jsonl(settings.eval_dir / f)}
+    history = AnswerHistory(settings.history_dir)
+    source = f"eval:{path.parent.name}/{path.stem}"
+    prompt = ((run.get("config") or {}).get("generation") or {}).get("prompt", "")
+    known = {a["answer_id"] for a in history.answers()}
+    ratings = history.ratings()
+    todo = []
+    for row in run["rows"]:
+        answer_id = hashlib.sha256(f"{path.resolve()}|{row['id']}|{row['lang']}".encode()).hexdigest()[:16]
+        if answer_id not in known:  # import once, so re-running `rate` continues where it stopped
+            history.add_answer({"answer_id": answer_id, "source": source, "question_id": row["id"], "question": row["question"],
+                                "language": row["lang"], "answer": row["answer"], "refused": row["refused"], "model": row["model"],
+                                "prompt": prompt, "auto": {k: row.get(k) for k in ("correct_behaviour", "keyword_coverage", "citation_precision")}})
+        if answer_id not in ratings:
+            todo.append((answer_id, row))
+    print(f"{len(run['rows'])} answers, {len(todo)} not rated yet. Flags: {', '.join(FLAGS)}")
+    print("Type: score 1-5, then flags separated by commas, optional '# comment'.  Enter = skip, q = quit.")
+    for answer_id, row in todo:
+        q = questions.get(row["id"], {})
+        print("\n" + "=" * 80)
+        print(f"[{row['id']} {row['lang']} {q.get('type', '')}] {row['question']}")
+        print(f"expected: {q.get('expected_answer') or '(refusal: not in the documentation)'}")
+        print(f"answer:   {row['answer']}")
+        while True:
+            line = input("rating> ").strip()
+            if line in ("", "q"):
+                break
+            body, _, comment = line.partition("#")
+            parts = body.replace(",", " ").split()
+            try:
+                history.rate(answer_id, int(parts[0]), parts[1:], comment.strip(), rater=args.rater)
+                break
+            except (ValueError, IndexError, HistoryError) as exc:
+                print(f"  {exc}")
+        if line == "q":
+            break
+    return cmd_ratings(argparse.Namespace(save=False))
+
+
+def cmd_ratings(args) -> int:
+    from common.config import LAB_ROOT
+    from common.utils import write_json
+    from history.store import AnswerHistory
+
+    summary = AnswerHistory(Settings.from_env().history_dir).summary()
+    for g in summary["groups"]:
+        flags = ", ".join(f"{k}={v:.2f}" for k, v in g["flags"].items() if v)
+        print(f"{g['source']:<40} {g['model']:<16} {g['prompt']:<14} rated {g['rated']}/{g['answers']}  "
+              f"score={g['mean_score'] if g['mean_score'] is not None else '-'}  {flags}")
+    if args.save:
+        path = LAB_ROOT / "experiments" / "results" / "manual_ratings.json"
+        write_json(path, summary)
+        print(f"saved to {path}")
     return 0
 
 
@@ -257,7 +326,15 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--lang", choices=["en", "ru"], default="en")
     sp.add_argument("--judge", action="store_true", help="LLM-as-a-judge scores (Ollama, JUDGE_MODEL)")
     sp.add_argument("--limit", type=int, default=0)
+    sp.add_argument("--questions", default="questions.jsonl", help="question file in data/eval, e.g. attacks.jsonl")
     sp.set_defaults(func=cmd_eval)
+    sp = sub.add_parser("rate", help="rate the answers of a generation run by hand (score 1-5 + flags)")
+    sp.add_argument("run", help="data/runs/generation_*.json or data/runs/experiments/<name>/<variant>_<lang>.json")
+    sp.add_argument("--rater", default="", help="who rates (to compare two raters later)")
+    sp.set_defaults(func=cmd_rate)
+    sp = sub.add_parser("ratings", help="summary of manual ratings per model/prompt")
+    sp.add_argument("--save", action="store_true", help="also write experiments/results/manual_ratings.json")
+    sp.set_defaults(func=cmd_ratings)
     sp = sub.add_parser("experiment", help="run experiment suites from configs/experiments.yaml ('list', 'all' or names separated by commas)")
     sp.add_argument("name")
     sp.add_argument("--lang", choices=["en", "ru"], default=None)

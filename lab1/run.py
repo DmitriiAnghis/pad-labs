@@ -8,6 +8,9 @@
     python run.py serve                # REST API + small web UI
     python run.py eval retrieval       # retrieval metrics on the test set
     python run.py eval generation      # answer quality on the test set (needs Ollama)
+    python run.py eval generation --questions attacks.jsonl   # prompt-injection questions
+    python run.py rate data/runs/generation_en_....json        # rate the answers by hand (1-5 + flags)
+    python run.py ratings --save       # summary of manual ratings per model/prompt
     python run.py experiment chunking  # one experiment suite from configs/experiments.yaml
     python run.py models download minilm
     python run.py status               # what is downloaded / indexed / configured
