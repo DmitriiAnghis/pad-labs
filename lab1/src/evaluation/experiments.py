@@ -4,6 +4,15 @@ For every variant the default pipeline config is overridden with the variant's s
 index is built (or loaded from data/indexes), and the same questions are evaluated. Summaries
 go to experiments/results (committed, used by the report); per-question details go to
 data/runs/experiments (not committed, for debugging single questions).
+
+Options of a generation experiment in the YAML:
+* ``questions: attacks.jsonl`` - another question file from data/eval (default questions.jsonl);
+* ``fixed_context: false``     - re-run retrieval for every variant. By default variants with the
+                                 same retrieval fingerprint share the saved search results, so an
+                                 LLM/prompt comparison is not disturbed by a different context.
+
+Every row records ``models`` (Ollama digest, HF revision, ONNX sha256) and the result file records
+``environment`` (code commit, corpus commit, package versions), so a run can be repeated exactly.
 """
 from __future__ import annotations
 
@@ -19,6 +28,7 @@ import yaml
 
 from common.config import LAB_ROOT, Settings, dotted_to_nested, load_pipeline_config
 from common.utils import read_json, utc_now, write_json
+from common.versions import environment, model_versions, ollama_models
 from evaluation.dataset import load_questions
 
 log = logging.getLogger("evaluation.experiments")
@@ -117,8 +127,12 @@ def run_experiment(settings: Settings, name: str, lang: str | None = None, limit
     langs = [lang] if lang else exp.get("langs", ["en"])
     base = load_pipeline_config(settings.config_path, settings)
     base = base.with_overrides(dotted_to_nested({k: _substitute(v, settings) for k, v in (exp.get("base") or {}).items()}))
-    questions = load_questions(settings.eval_dir / "questions.jsonl", limit=limit)
+    questions_file = exp.get("questions", "questions.jsonl")
+    questions = load_questions(settings.eval_dir / questions_file, limit=limit)
+    fixed_context = kind == "generation" and exp.get("fixed_context", True)
+    shared_retrievals: dict[tuple[str, str], dict] = {}
     resources = Resources(settings)
+    ollama_tags = ollama_models(settings) if resources.check("ollama")[0] else {}
     variants = [v for v in expand_variants(exp) if not only or v["name"] in only]
 
     print(f"\n=== experiment '{name}': {exp.get('description', '')}")
@@ -139,13 +153,15 @@ def run_experiment(settings: Settings, name: str, lang: str | None = None, limit
                 t0 = time.perf_counter()
                 pipeline = RagPipeline.from_config(settings, config)
                 build_s = time.perf_counter() - t0
+                judge = None
                 if kind == "retrieval":
                     result = evaluate_retrieval(pipeline, questions, lg)
                 else:
-                    judge = None
                     if exp.get("judge") and resources.check("ollama")[0] and config.generation.backend == "ollama":
                         judge = Judge(settings)
-                    result = evaluate_generation(pipeline, questions, lg, judge)
+                    retrievals = shared_retrievals.setdefault((config.retrieval_fingerprint(), lg), {}) if fixed_context else None
+                    result = evaluate_generation(pipeline, questions, lg, judge, retrievals=retrievals)
+                    row["retrieval_fingerprint"] = config.retrieval_fingerprint()
                 meta = pipeline.index.meta
                 row["index"] = {
                     "key": meta.get("key"),
@@ -157,6 +173,7 @@ def run_experiment(settings: Settings, name: str, lang: str | None = None, limit
                     "load_or_build_seconds": round(build_s, 2),
                 }
                 row["config_fingerprint"] = config.fingerprint()
+                row["models"] = model_versions(settings, config, judge=judge is not None, ollama_tags=ollama_tags)
                 row["summary"] = result["summary"]
                 write_json(settings.runs_dir / "experiments" / name / f"{_safe(variant['name'])}_{lg}.json", {"config": config.model_dump(), **result})
                 print(f"  - {variant['name']:<34} {lg}  {_headline(kind, result['summary'])}")
@@ -175,6 +192,9 @@ def run_experiment(settings: Settings, name: str, lang: str | None = None, limit
         "focus": exp.get("focus"),
         "updated_at": utc_now(),
         "questions": len(questions),
+        "questions_file": questions_file,
+        "fixed_context": fixed_context,
+        "environment": environment(settings),
         "machine": {"platform": platform.platform(), "python": platform.python_version(), "processor": platform.processor() or platform.machine()},
         "base_config": base.model_dump(),
         "rows": _sorted(_merge_rows(old.get("rows", []), rows), [v["name"] for v in expand_variants(exp)], langs),

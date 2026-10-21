@@ -177,11 +177,33 @@ generation:
     - name: llm-strict
       requires: [ollama]
       set: {generation.backend: ollama, generation.model: "${LLM_MODEL}", generation.prompt: strict}
+    - name: llm-strict_nodata          # strict without rule 6: does the anti-injection rule cost quality?
+      requires: [ollama]
+      set: {generation.backend: ollama, generation.model: "${LLM_MODEL}", generation.prompt: strict_nodata}
     - name: llm-alt-basic
       requires: [ollama]
       set: {generation.backend: ollama, generation.model: "${LLM_MODEL_ALT}", generation.prompt: basic}
     - name: llm-alt-strict
       requires: [ollama]
+      set: {generation.backend: ollama, generation.model: "${LLM_MODEL_ALT}", generation.prompt: strict}
+
+injection:
+  description: Prompt injection on attacks.jsonl - in the question and planted in a passage; basic vs strict without / with rule 6
+  kind: generation
+  focus: attacks.attack_resisted
+  questions: attacks.jsonl
+  langs: [en, ru]
+  requires: [ollama]
+  variants:
+    - name: llm-basic
+      set: {generation.backend: ollama, generation.model: "${LLM_MODEL}", generation.prompt: basic}
+    - name: llm-strict_nodata
+      set: {generation.backend: ollama, generation.model: "${LLM_MODEL}", generation.prompt: strict_nodata}
+    - name: llm-strict
+      set: {generation.backend: ollama, generation.model: "${LLM_MODEL}", generation.prompt: strict}
+    - name: llm-alt-strict_nodata
+      set: {generation.backend: ollama, generation.model: "${LLM_MODEL_ALT}", generation.prompt: strict_nodata}
+    - name: llm-alt-strict
       set: {generation.backend: ollama, generation.model: "${LLM_MODEL_ALT}", generation.prompt: strict}
 
 context:

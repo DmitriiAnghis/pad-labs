@@ -20,6 +20,7 @@ lab1/data/cache/
 lab1/data/models/
 lab1/data/logs/
 lab1/data/runs/
+lab1/data/history/
 
 # IDE / OS
 .idea/
