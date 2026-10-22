@@ -12,6 +12,8 @@
 # requires: ollama | sentence_transformers | qdrant - variants are skipped (and marked as
 #           skipped in the results) when the resource is not available.
 # ${LLM_MODEL}, ${LLM_MODEL_ALT}, ${EMBED_MODEL}, ${RERANK_MODEL} are taken from .env.
+# LLM query processing (retrieval.rewrite_query / translate_query) is switched off for every
+# experiment unless the experiment sets it itself (see query_language and query_rewrite).
 # Experiments on components BEFORE the reranker set reranker.backend=none, otherwise the
 # reranker hides differences between retrievers / chunkings (measured: MRR ~1.0 everywhere).
 # Results are merged by (variant, lang): re-running on another machine only replaces
@@ -144,6 +146,21 @@ query_language:
     - name: hybrid-bge-m3+translate
       requires: [ollama]
       set: {embedding.backend: ollama, embedding.model: bge-m3, retrieval.translate_query: true}
+
+query_rewrite:
+  description: LLM query processing before search - none vs translation only vs rewrite (translate + split into sub-queries + Odoo terms). multi_doc and contextual questions are where the split should help
+  kind: retrieval
+  focus: final.mrr
+  langs: [en, ru]
+  variants:
+    - name: none
+      set: {}
+    - name: translate
+      requires: [ollama]
+      set: {retrieval.translate_query: true}
+    - name: rewrite
+      requires: [ollama]
+      set: {retrieval.rewrite_query: true}
 
 vectorstore:
   description: Vector index - FAISS exact (flat) vs FAISS HNSW vs Qdrant

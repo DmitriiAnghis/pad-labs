@@ -162,7 +162,7 @@ def ready():
         checks["index"] = {"ok": False, "detail": state.error or "loading"}
     else:
         checks["index"] = {"ok": True, "detail": f"{p.index.key}: {len(p.index.chunks)} chunks"}
-        if p.config.generation.backend == "ollama" or p.config.retrieval.translate_query or p.config.embedding.backend == "ollama":
+        if p.config.generation.backend == "ollama" or p.config.retrieval.translate_query or p.config.retrieval.rewrite_query or p.config.embedding.backend == "ollama":
             from generation.ollama_client import OllamaClient
 
             up, info = OllamaClient(state.settings).health()
@@ -214,6 +214,7 @@ def search(req: SearchRequest):
     return {
         "query": r.query,
         "search_query": r.search_query,
+        "sub_queries": r.sub_queries,
         "language": r.language,
         "results": [c.to_dict(with_text=True) for c in r.reranked],
         "retrieved": [c.to_dict(with_text=False) for c in r.retrieved],

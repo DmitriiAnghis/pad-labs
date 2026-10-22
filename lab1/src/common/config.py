@@ -209,6 +209,10 @@ class RetrievalConfig(BaseModel):
     candidates_per_retriever: int = 50  # for hybrid: how deep each list is read before fusion
     bm25: BM25Config = Field(default_factory=BM25Config)
     translate_query: bool = False  # translate non-English queries to English with the LLM
+    # one LLM call for every query: translate + split a multi-part question into sub-queries + Odoo terms;
+    # each sub-query is searched and reranked on its own, the lists are fused with RRF (replaces translate_query)
+    rewrite_query: bool = False
+    max_subqueries: int = 3
 
 
 class FilterConfig(BaseModel):

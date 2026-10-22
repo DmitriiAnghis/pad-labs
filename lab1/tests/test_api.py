@@ -27,6 +27,7 @@ class FakePipeline:
 
         class retrieval:
             translate_query = False
+            rewrite_query = False
 
         class embedding:
             backend = "minilm"
