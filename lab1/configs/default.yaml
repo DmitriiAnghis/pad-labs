@@ -1,46 +1,67 @@
-# Default RAG pipeline (values chosen by the experiments, see DECISIONS.md / experiments/REPORT.md).
-# Any value can be overridden from the CLI:  python run.py --set retrieval.top_k=10 search "..."
+# Основная конфигурация RAG-пайплайна: как система скачивает, обрабатывает, ищет и отвечает.
+# Значения выбраны по результатам экспериментов (обоснование: DECISIONS.md, цифры: experiments/REPORT.md).
+# Формат YAML: "раздел:" и под ним с отступом его параметры. true/false — включено/выключено, null — не задано.
+# Любой параметр можно переопределить на один запуск без правки файла:
+#   python run.py --set retrieval.top_k=10 search "..."
+
+# Источник данных (команда grab): какие папки репозитория документации Odoo скачивать.
 source:
   include:
-    - content/applications/inventory_and_mrp/inventory
-    - content/applications/inventory_and_mrp/barcode
+    - content/applications/inventory_and_mrp/inventory   # раздел "Склад"
+    - content/applications/inventory_and_mrp/barcode     # раздел "Штрихкоды"
+
+# Предобработка (команда process): RST-разметка -> чистый текст с разделами.
 processing:
-  version: 1
-  keep_image_alt: false
-  keep_seealso: true
-  min_doc_chars: 200
+  version: 1              # версия обработчика; при изменении все документы обрабатываются заново
+  keep_image_alt: false   # не сохранять alt-подписи к картинкам (описания скриншотов)
+  keep_seealso: true      # сохранять блоки "См. также" со ссылками на связанные статьи
+  min_doc_chars: 200      # документы короче 200 символов отбрасываются как почти пустые
+
+# Разбиение на чанки (фрагменты текста, по которым идёт поиск).
 chunking:
-  strategy: section
-  max_chars: 1000
-  overlap: 0
-  min_chars: 100
-  add_header: true
+  strategy: section       # стратегия: по разделам документа (границы — заголовки)
+  max_chars: 1000         # максимальная длина чанка в символах
+  overlap: 0              # перекрытие соседних чанков в символах (0 — без перекрытия)
+  min_chars: 100          # чанки короче 100 символов склеиваются с соседним
+  add_header: true        # в начало чанка добавляется "Документ > Раздел", чтобы он был понятен без контекста
+
+# Эмбеддинги: перевод текста в вектор чисел, чтобы искать по смыслу, а не по точным словам.
 embedding:
-  backend: minilm
+  backend: minilm         # модель all-MiniLM-L6-v2 (384 числа на текст, только английский, работает на CPU)
+
+# Векторное хранилище: где лежат векторы чанков и как по ним ищется ближайший.
 vectorstore:
-  backend: faiss
-  index_type: flat
+  backend: faiss          # библиотека FAISS
+  index_type: flat        # точный перебор всех векторов; при ~1000 чанков это быстро
+
+# Поиск кандидатов (retrieval).
 retrieval:
-  mode: hybrid
-  top_k: 20
-  rrf_k: 60
-  candidates_per_retriever: 50
-  translate_query: true
-  rewrite_query: true
-  max_subqueries: 3
+  mode: hybrid            # гибридный поиск: векторный (по смыслу) + BM25 (по совпадению слов)
+  top_k: 20               # сколько кандидатов остаётся после объединения двух списков
+  rrf_k: 60               # константа формулы RRF, которая объединяет два списка по местам (стандартное значение)
+  candidates_per_retriever: 50   # сколько результатов берёт каждый из двух способов поиска до объединения
+  translate_query: true   # LLM переводит вопрос на английский (MiniLM понимает только английский)
+  rewrite_query: true     # LLM переформулирует вопрос и делит его на подвопросы, если их несколько
+  max_subqueries: 3       # максимум подвопросов
+
+# Фильтрация кандидатов перед reranker.
 filters:
-  enabled: true
-  min_score: null
-  min_chars: 60
-  dedup: true
-  near_dup_jaccard: 0.9
-  max_per_doc: 3
+  enabled: true           # фильтры включены
+  min_score: null         # порог по оценке похожести не используется (с MiniLM он отсекал полезные чанки)
+  min_chars: 60           # отбрасывать чанки короче 60 символов
+  dedup: true             # убирать точные дубликаты
+  near_dup_jaccard: 0.9   # убирать почти дубликаты: если совпадает 90% слов (мера Жаккара)
+  max_per_doc: 3          # не больше 3 чанков из одного документа, чтобы источники были разнообразнее
+
+# Reranker: повторная, более точная оценка кандидатов.
 reranker:
-  backend: maxsim
-  top_n: 5
-  min_score: null
+  backend: maxsim         # MaxSim: каждому слову вопроса ищется самое близкое слово в чанке, оценки суммируются
+  top_n: 5                # сколько лучших чанков передаётся в LLM
+  min_score: null         # порог не используется
+
+# Генерация ответа.
 generation:
-  backend: ollama
-  prompt: strict
-  max_context_chars: 6000
-  answer_language: auto
+  backend: ollama         # LLM через Ollama (на домашнем ПК, адрес в .env)
+  prompt: strict          # строгий промпт: только по найденным чанкам, ссылки [1], [2], иначе отказ
+  max_context_chars: 6000 # максимальный объём текста чанков, который получает LLM
+  answer_language: auto   # язык ответа совпадает с языком вопроса

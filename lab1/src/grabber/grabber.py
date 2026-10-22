@@ -111,11 +111,11 @@ class Grabber:
         return self.files_dir / f"{doc_id}.rst"
 
     # ------------------------------------------------------------------ run
-    def run(self) -> SyncReport:
+    def run(self, force: bool = False) -> SyncReport:
         with RunLock(self.raw_dir / ".lock"):
-            return self._run()
+            return self._run(force)
 
-    def _run(self) -> SyncReport:
+    def _run(self, force: bool = False) -> SyncReport:
         report = SyncReport(started_at=utc_now())
         manifest = self.load_manifest()
         docs: dict[str, dict] = manifest["documents"]
@@ -133,19 +133,21 @@ class Grabber:
             doc_id = doc_id_from_path(rf.path, src_cfg.id_prefix)
             seen.add(doc_id)
             prev = docs.get(doc_id)
-            if prev and prev.get("status") == "active" and prev.get("blob_sha") == rf.blob_sha and self.raw_path(doc_id).exists():
+            if not force and prev and prev.get("status") == "active" and prev.get("blob_sha") == rf.blob_sha and self.raw_path(doc_id).exists():
                 report.unchanged += 1
                 continue
             try:
                 raw = self.source.read(rf.path)
-                text = raw.decode("utf-8")
+                # Git for Windows checks files out with CRLF (core.autocrlf); text-mode writing on
+                # Windows would then turn every "\r\n" into "\r\r\n" = an extra blank line everywhere
+                text = raw.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
             except Exception as exc:  # noqa: BLE001 - a broken file must not stop the run
                 log.error("failed to read %s: %s", rf.path, exc)
                 report.errors.append({"doc_id": doc_id, "path": rf.path, "error": str(exc)})
                 continue
             target = self.raw_path(doc_id)
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(text, encoding="utf-8")
+            target.write_text(text, encoding="utf-8", newline="\n")
             now = utc_now()
             record = {
                 "doc_id": doc_id,

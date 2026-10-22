@@ -66,3 +66,11 @@ def test_duplicates_and_broken_files(settings, config):
     manifest = Grabber(settings, config, source=FakeSource(files)).load_manifest()
     assert manifest["documents"]["inventory/copy"]["duplicate_of"] == "inventory/a"
     assert {d["doc_id"] for d in active_documents(manifest)} == {"inventory/a"}
+
+
+def test_crlf_checkout_is_saved_with_unix_newlines(settings, config):
+    # Git for Windows (core.autocrlf=true) hands the grabber CRLF files
+    files = {PREFIX + "inventory/a.rst": ("sha-a", "A\r\n=\r\n\r\ntext a\r\n")}
+    run(settings, config, files)
+    raw = Grabber(settings, config, source=FakeSource(files)).raw_path("inventory/a").read_bytes()
+    assert raw == b"A\n=\n\ntext a\n"
