@@ -123,3 +123,27 @@ def test_think_blocks_are_stripped(settings, monkeypatch):
 
     monkeypatch.setattr(requests, "post", lambda *a, **kw: Resp())
     assert OllamaClient(settings).chat("m", [])["text"] == "Answer [1]"
+
+
+def test_rewrite_splits_a_two_part_question_and_fuses_both_topics(pipeline):
+    pipeline.config = pipeline.config.with_overrides({"retrieval": {"rewrite_query": True}})
+    client = FakeClient('{"queries": ["How do I enable wave transfers?", "Which RFID encoding scheme is supported?"]}')
+    pipeline._client = client
+    r = pipeline.retrieve("Как включить волновые перемещения и какую RFID-кодировку поддерживает Odoo?")
+    assert r.sub_queries == ["How do I enable wave transfers?", "Which RFID encoding scheme is supported?"]
+    assert {"inventory/wave", "barcode/rfid"} <= {c.chunk["doc_id"] for c in r.reranked}
+    assert "rewrite" in r.timings_ms and len(client.calls) == 1
+
+
+def test_rewrite_failure_falls_back_to_the_original_query(pipeline):
+    pipeline.config = pipeline.config.with_overrides({"retrieval": {"rewrite_query": True}})
+    pipeline._client = FakeClient("not json at all")
+    r = pipeline.retrieve("How do I enable wave picking?")
+    assert r.sub_queries == ["How do I enable wave picking?"]
+    assert r.reranked[0].chunk["doc_id"] == "inventory/wave"
+
+
+def test_rewrite_keeps_at_most_max_subqueries(pipeline):
+    pipeline.config = pipeline.config.with_overrides({"retrieval": {"rewrite_query": True, "max_subqueries": 2}})
+    pipeline._client = FakeClient('{"queries": ["wave", "wave", "rfid", "fefo"]}')
+    assert pipeline.retrieve("wave, rfid and fefo?").sub_queries == ["wave", "rfid"]

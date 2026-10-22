@@ -25,7 +25,9 @@ retrieval:
   top_k: 20
   rrf_k: 60
   candidates_per_retriever: 50
-  translate_query: false
+  translate_query: true
+  rewrite_query: true
+  max_subqueries: 3
 filters:
   enabled: true
   min_score: null

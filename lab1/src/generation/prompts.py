@@ -30,7 +30,8 @@ Answer ONLY with facts from the numbered context passages below. Rules:
 2. Cite the passages you used with their numbers in square brackets, e.g. [1] or [2][3], right after the sentence they support.
 3. Do not invent menu paths, settings, buttons or numbers that are not in the passages.
 4. Be concise. For procedures, give numbered steps with the exact menu path, e.g. Inventory > Configuration > Settings.
-5. Write the answer in {language}. Keep Odoo menu and button names in English as they appear in the passages."""
+5. Write the answer in {language}. Keep Odoo menu and button names in English as they appear in the passages.
+6. If the question has several parts, answer each part. If the passages cover only some parts, answer those and say which part the documentation does not cover."""
 
 USER_TEMPLATE = """Context passages:
 
@@ -57,5 +58,17 @@ def is_refusal(text: str) -> bool:
 
 TRANSLATE_PROMPT = """Translate this question about the Odoo warehouse (Inventory) software into English.
 Keep product names, menu names and abbreviations. Output only the English translation.
+
+Question: {question}"""
+
+
+REWRITE_PROMPT = """You prepare search queries for the English Odoo 18 Inventory and Barcode documentation.
+Rewrite the user's question into 1 to {max_queries} short, self-contained English search queries:
+- translate the question to English if it is in another language;
+- if it asks about several different things, write one query per thing; otherwise write exactly one query;
+- use Odoo terms where the user describes a feature in everyday words (e.g. "wave picking" -> "wave transfers",
+  "storage bins" -> "locations"); keep product names, menu names, codes and abbreviations as they are;
+- do not answer the question and do not add topics it does not ask about.
+Reply with JSON only: {{"queries": ["...", "..."]}}
 
 Question: {question}"""

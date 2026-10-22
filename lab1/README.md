@@ -21,15 +21,18 @@ RAG-система, которая отвечает на вопросы по д�
  Офлайн (индексация)                                   Онлайн (вопрос)
  ───────────────────                                   ────────────────
  GitHub odoo/documentation                             вопрос (EN/RU)
-        │ git sparse + shallow clone                      │ проверка, язык, [перевод]
+        │ git sparse + shallow clone                      │ проверка, язык
         ▼                                                 ▼
- grabber ── manifest.json (blob SHA)                   Retriever: BM25 + dense ─► RRF → Top-20
+ grabber ── manifest.json (blob SHA)                   LLM: перевод + 1–3 подвопроса + термины Odoo
+        │                                                 │ (дальше всё для каждого подвопроса)
+        │                                                 ▼
+        │                                              Retriever: BM25 + dense ─► RRF → Top-20
         │ новые / изменённые / удалённые / дубли          │
         ▼                                                 ▼
  data/raw/files/*.rst                                  Filters: метаданные, длина, порог,
         │                                                 дубликаты, ≤3 chunk на документ
         ▼                                                 ▼
- preprocessing: RST → секции и блоки                   Reranker (опц.) → Top-5
+ preprocessing: RST → секции и блоки                   Reranker (опц.) → Top-5 (подвопросы: слияние RRF)
         │ роли, таблицы, admonitions, ссылки              │
         ▼                                                 ├── пусто ─► отказ (LLM не вызывается)
  data/processed/docs.jsonl                                ▼

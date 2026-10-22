@@ -116,6 +116,9 @@ def run_experiment(settings: Settings, name: str, lang: str | None = None, limit
     kind = exp.get("kind", "retrieval")
     langs = [lang] if lang else exp.get("langs", ["en"])
     base = load_pipeline_config(settings.config_path, settings)
+    # query processing through the LLM is off unless the experiment varies it: one factor at a time,
+    # and retrieval experiments keep running without Ollama (results stay comparable with older runs)
+    base = base.with_overrides({"retrieval": {"rewrite_query": False, "translate_query": False}})
     base = base.with_overrides(dotted_to_nested({k: _substitute(v, settings) for k, v in (exp.get("base") or {}).items()}))
     questions = load_questions(settings.eval_dir / "questions.jsonl", limit=limit)
     resources = Resources(settings)
