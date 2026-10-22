@@ -64,7 +64,9 @@ class FaissStore(VectorStore):
     def save(self, path: Path) -> None:
         import faiss
 
-        faiss.write_index(self.index, str(path / "faiss.index"))
+        # Serialize in memory and write with Python: faiss.write_index opens the file from C++,
+        # which on Windows fails for non-ASCII paths (e.g. a folder named "4_Курс").
+        (path / "faiss.index").write_bytes(faiss.serialize_index(self.index).tobytes())
 
     @classmethod
     def load(cls, path: Path, dim: int, index_type: str) -> "FaissStore":
@@ -73,7 +75,8 @@ class FaissStore(VectorStore):
         store = cls.__new__(cls)
         store.dim = dim
         store.index_type = index_type
-        store.index = faiss.read_index(str(path / "faiss.index"))
+        data = np.frombuffer((path / "faiss.index").read_bytes(), dtype=np.uint8)
+        store.index = faiss.deserialize_index(data)
         return store
 
 
