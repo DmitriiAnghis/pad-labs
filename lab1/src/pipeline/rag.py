@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -87,6 +88,19 @@ class Answer:
         return d
 
 
+_PRODUCT_RE = re.compile(r"(?:\b(?:in|for|on)\s+)?\bodoo(?:\s+\d+(?:\.\d+)?)?\b", re.I)
+
+
+def strip_added_product(text: str, question: str) -> str:
+    """Remove "in Odoo 18"-style words the LLM appended but the user never wrote: every
+    chunk is from the Odoo docs, so they only pull generic configuration pages up."""
+    text = " ".join(text.split())
+    if "odoo" in question.lower():
+        return text
+    text = " ".join(_PRODUCT_RE.sub(" ", text).split())
+    return re.sub(r"\s+([?.!,])", r"\1", text).strip(" ,")
+
+
 class RagPipeline:
     def __init__(self, settings: Settings, config: PipelineConfig, index: RagIndex) -> None:
         self.settings = settings
@@ -141,15 +155,24 @@ class RagPipeline:
             return query
 
     def _rewrite(self, query: str, language: str) -> list[str]:
-        """LLM -> 1..max_subqueries English search queries. Any failure falls back to translation."""
+        """LLM -> English search queries: the whole question, or one query per topic if it has several.
+        Any failure falls back to translation."""
         from generation.ollama_client import OllamaError
 
         n = max(1, self.config.retrieval.max_subqueries)
         try:
             text = self._chat(REWRITE_PROMPT.format(question=query, max_queries=n), max_tokens=200, json_format=True)
             data = json.loads(text[text.find("{"): text.rfind("}") + 1])
-            queries = [q.strip() for q in data.get("queries", []) if isinstance(q, str) and q.strip()]
-            queries = list(dict.fromkeys(queries))[:n]  # no duplicates, at most n
+
+            def clean(items) -> list[str]:
+                items = [strip_added_product(q, query) for q in items if isinstance(q, str)]
+                return list(dict.fromkeys(q for q in items if q))  # no duplicates
+
+            parts = clean(data.get("queries") or [])[:n]
+            whole = clean([data.get("translation") or ""])
+            # one topic -> search the whole question only: paraphrases of one topic, fused together,
+            # pushed generic chunks above the right one (live run 2026-10-22, "storage locations")
+            queries = parts if len(parts) > 1 else (whole or parts)
             if queries:
                 return queries
             log.warning("query rewrite returned no queries: %r", text[:200])

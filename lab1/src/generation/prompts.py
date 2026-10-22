@@ -63,12 +63,14 @@ Question: {question}"""
 
 
 REWRITE_PROMPT = """You prepare search queries for the English Odoo 18 Inventory and Barcode documentation.
-Rewrite the user's question into 1 to {max_queries} short, self-contained English search queries:
-- translate the question to English if it is in another language;
-- if it asks about several different things, write one query per thing; otherwise write exactly one query;
-- use Odoo terms where the user describes a feature in everyday words (e.g. "wave picking" -> "wave transfers",
-  "storage bins" -> "locations"); keep product names, menu names, codes and abbreviations as they are;
-- do not answer the question and do not add topics it does not ask about.
-Reply with JSON only: {{"queries": ["...", "..."]}}
+Return JSON with two fields:
+- "translation": the whole question as one short English search query. Translate it if it is in another
+  language; where the user describes a feature in everyday words, use the Odoo term (e.g. "wave picking" ->
+  "wave transfers", "storage bins" -> "locations"); keep product names, menu names, codes and abbreviations as they are.
+- "queries": only if the question asks about several DIFFERENT things, one such query per thing (at most
+  {max_queries}); if it asks about one thing, an empty list. Do not split one thing into paraphrases.
+Do not add words the user did not ask about: no "Odoo", no version number, no app name, no extra topics.
+Do not answer the question.
+Reply with JSON only: {{"translation": "...", "queries": []}}
 
 Question: {question}"""
