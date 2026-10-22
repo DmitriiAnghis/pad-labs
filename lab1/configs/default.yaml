@@ -1,46 +1,71 @@
-# Default RAG pipeline (values chosen by the experiments, see DECISIONS.md / experiments/REPORT.md).
-# Any value can be overridden from the CLI:  python run.py --set retrieval.top_k=10 search "..."
+# Главные настройки RAG: КАК система работает.
+# Строки, которые начинаются с #, — подсказки для человека, программа их не читает.
+# Слово с двоеточием без значения (например "source:") — название раздела,
+# строки под ним с отступом — настройки этого раздела.
+# true = да, false = нет, null = не задано. backend = чем делать эту работу.
+# Почему выбраны именно эти числа — см. DECISIONS.md и experiments/REPORT.md.
+# Любую настройку можно поменять на один запуск, не трогая файл:
+#   python run.py --set retrieval.top_k=10 search "..."
+
+# --- Шаг 1. Что скачивать (команда grab) ---
 source:
+  # список папок из документации Odoo на GitHub, которые скачиваются
   include:
-    - content/applications/inventory_and_mrp/inventory
-    - content/applications/inventory_and_mrp/barcode
+    - content/applications/inventory_and_mrp/inventory   # статьи про склад
+    - content/applications/inventory_and_mrp/barcode     # статьи про штрихкоды
+
+# --- Шаг 2. Чистка текста от служебных значков (команда process) ---
 processing:
-  version: 1
-  keep_image_alt: false
-  keep_seealso: true
-  min_doc_chars: 200
+  version: 1              # номер версии чистилки: поменяешь на 2 — все статьи почистятся заново
+  keep_image_alt: false   # подписи к картинкам ("скриншот меню...") выкидывать
+  keep_seealso: true      # блоки "См. также" со ссылками на другие статьи оставлять
+  min_doc_chars: 200      # статью короче 200 букв выбросить целиком: в ней почти пусто
+
+# --- Шаг 3. Резка статей на кусочки (команда index) ---
 chunking:
-  strategy: section
-  max_chars: 1000
-  overlap: 0
-  min_chars: 100
-  add_header: true
+  strategy: section       # как резать: section = по разделам (по заголовкам статьи)
+  max_chars: 1000         # кусочек не длиннее 1000 букв
+  overlap: 0              # сколько букв конца кусочка повторить в начале следующего; 0 = не повторять
+  min_chars: 100          # кусочек короче 100 букв приклеить к соседнему
+  add_header: true        # в начало кусочка дописать название статьи и раздела, чтобы было понятно, о чём он
+
+# --- Шаг 3. Превращение текста в числа (векторы), чтобы искать по смыслу ---
 embedding:
-  backend: minilm
+  backend: minilm         # модель MiniLM (понимает только английский, работает на процессоре)
+
+# --- Шаг 3. Где хранить эти числа ---
 vectorstore:
-  backend: faiss
-  index_type: flat
+  backend: faiss          # программа FAISS для быстрого поиска похожих чисел
+  index_type: flat        # flat = сравнить вопрос со всеми кусочками подряд: точно и для нас быстро
+
+# --- Шаг 4. Поиск кусочков под вопрос ---
 retrieval:
-  mode: hybrid
-  top_k: 20
-  rrf_k: 60
-  candidates_per_retriever: 50
-  translate_query: true
-  rewrite_query: true
-  max_subqueries: 3
+  mode: hybrid            # искать двумя способами сразу: по смыслу (числа) и по одинаковым словам (BM25)
+  top_k: 20               # после поиска оставить 20 лучших кусочков
+  rrf_k: 60               # число в формуле, которая смешивает два списка в один (стандартное значение)
+  candidates_per_retriever: 50   # каждый из двух способов сначала находит по 50 кусочков
+  translate_query: true   # нейросеть переводит вопрос на английский (MiniLM понимает только английский)
+  rewrite_query: true     # нейросеть переписывает вопрос и делит на части, если в нём несколько вопросов
+  max_subqueries: 3       # частей не больше 3
+
+# --- Шаг 4. Фильтр мусора среди найденных кусочков ---
 filters:
-  enabled: true
-  min_score: null
-  min_chars: 60
-  dedup: true
-  near_dup_jaccard: 0.9
-  max_per_doc: 3
+  enabled: true           # фильтр включён
+  min_score: null         # порог похожести не задан: по оценке ничего не выкидываем
+  min_chars: 60           # выкинуть кусочки короче 60 букв
+  dedup: true             # выкинуть одинаковые кусочки
+  near_dup_jaccard: 0.9   # выкинуть почти одинаковые: если совпадает 90% слов, оставить один
+  max_per_doc: 3          # из одной статьи брать не больше 3 кусочков
+
+# --- Шаг 4. Перепроверка: из 20 кусочков точнее выбрать лучшие ---
 reranker:
-  backend: maxsim
-  top_n: 5
-  min_score: null
+  backend: maxsim         # способ: каждое слово вопроса ищет самое похожее слово в кусочке
+  top_n: 5                # оставить 5 лучших кусочков, их и получит нейросеть
+  min_score: null         # порог не задан
+
+# --- Шаг 4. Ответ нейросети по найденным кусочкам ---
 generation:
-  backend: ollama
-  prompt: strict
-  max_context_chars: 6000
-  answer_language: auto
+  backend: ollama         # отвечает нейросеть через Ollama (на домашнем ПК)
+  prompt: strict          # строгая инструкция: отвечать только по кусочкам, не выдумывать, ставить ссылки [1]
+  max_context_chars: 6000 # дать нейросети не больше 6000 букв кусочков
+  answer_language: auto   # отвечать на том же языке, на каком спросили
