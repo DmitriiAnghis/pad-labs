@@ -39,7 +39,7 @@ def cmd_grab(args) -> int:
     from grabber.grabber import Grabber
 
     settings, config = _load(args)
-    report = Grabber(settings, config).run()
+    report = Grabber(settings, config).run(force=args.force)
     print(report.summary())
     for label, items in (("new", report.new), ("updated", report.updated), ("deleted", report.deleted)):
         if items and len(items) <= 20:
@@ -232,7 +232,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-v", "--verbose", action="store_true")
     sub = p.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("grab", help="download / update documents (incremental)").set_defaults(func=cmd_grab)
+    sp = sub.add_parser("grab", help="download / update documents (incremental)")
+    sp.add_argument("--force", action="store_true", help="re-save every file even if its blob SHA is unchanged")
+    sp.set_defaults(func=cmd_grab)
     sp = sub.add_parser("process", help="RST -> clean structured documents")
     sp.add_argument("--force", action="store_true")
     sp.set_defaults(func=cmd_process)
