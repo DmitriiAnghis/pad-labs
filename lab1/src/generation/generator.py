@@ -70,7 +70,7 @@ class OllamaGenerator:
     def generate(self, question: str, cands: list[Candidate], language: str) -> GenerationResult:
         context, used = build_context(cands, self.cfg.max_context_chars)
         messages = build_messages(self.cfg.prompt, question, context, language)
-        reply = self.client.chat(self.model, messages, max_tokens=self.cfg.max_tokens)
+        reply = self.client.chat(self.model, messages, max_tokens=self.cfg.max_tokens, name="answer")
         text = reply["text"]
         return GenerationResult(
             text=text,

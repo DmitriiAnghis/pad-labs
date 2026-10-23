@@ -78,7 +78,8 @@ RAG-система, которая отвечает на вопросы по д�
 | Reranker | MaxSim на MiniLM (CPU), cross-encoder bge-reranker-v2-m3 (ПК) | см. эксперимент reranker |
 | LLM | Qwen 3.5 (4B / 9B) через Ollama | бесплатно, локально, поддерживает русский |
 | API | FastAPI + Uvicorn | Swagger из коробки, pydantic-валидация |
-| Тесты | pytest | 47 тестов, без сети и без моделей |
+| Трассировка | своя трасса на каждый ответ + Langfuse (локально в Docker) через HTTP ingestion API | видно каждый шаг, промпт и ответ LLM, токены и время; без SDK и без новых зависимостей |
+| Тесты | pytest | 60 тестов, без сети и без моделей |
 
 ## 4. Установка
 
@@ -157,6 +158,16 @@ python run.py --config configs\my.yaml ask "..."
 Каждый ответ содержит заголовок `X-Request-ID`; тот же id есть в каждой строке лога этого
 запроса. Ошибки возвращаются как `{"error": "...", "request_id": "..."}` без stack trace:
 422 — неверный вопрос, 503 — индекс ещё грузится или LLM недоступна, 500 — внутренняя ошибка.
+
+**Трассировка.** Ответ `/ask` содержит поле `trace`: шаги ответа с временем (`query` →
+`rewrite` (LLM) → `search` → `embed_query` / `retrieve` / `filter` / `rerank` → `answer` (LLM)).
+Веб-страница рисует их под ответом. Если в `.env` заданы `LANGFUSE_PUBLIC_KEY` и
+`LANGFUSE_SECRET_KEY`, та же трасса уходит в [Langfuse](https://langfuse.com) (полные промпты,
+ответы LLM, токены, найденные chunks), а на странице появляется ссылка «open in Langfuse».
+Отправка идёт в фоне: недоступный Langfuse не замедляет и не ломает ответ, в логе только
+предупреждение. Код: `src/common/tracing.py`. Langfuse запускается локально:
+`docker compose up -d` в папке с официальным `docker-compose.yml` Langfuse, панель на
+`http://localhost:3000`.
 
 ## 8. Примеры использования
 
