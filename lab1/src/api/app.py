@@ -68,6 +68,7 @@ class AskResponse(BaseModel):
     sources: list[Source]
     model: str
     timings_ms: dict
+    trace: Optional[dict] = Field(None, description="pipeline steps; url is the Langfuse link when it is configured")
     debug: Optional[dict] = None
 
 
@@ -192,8 +193,10 @@ def ask(req: AskRequest):
         log.exception("ask failed")
         return _error(500, "internal error")
     data = ans.to_dict(debug=req.debug)
+    trace = getattr(ans, "trace", None)
     log_event(log, "answer", refused=ans.refused, reason=ans.refusal_reason, sources=len(ans.sources),
-              model=ans.model, total_ms=round(ans.timings_ms.get("total", 0), 1))
+              model=ans.model, total_ms=round(ans.timings_ms.get("total", 0), 1),
+              trace_id=trace.id if trace is not None else None)
     return data
 
 
@@ -234,6 +237,7 @@ def config():
         "index": {k: v for k, v in pipeline.index.meta.items() if k != "config"},
         "models": {"llm": s.llm_model, "embed": s.embed_model, "rerank": s.rerank_model},
         "ollama_url": s.ollama_url,
+        "langfuse": {"enabled": pipeline.langfuse is not None, "host": s.langfuse_host},  # keys are never shown
     }
 
 
@@ -259,18 +263,22 @@ INDEX_HTML = """<!doctype html>
  button:disabled{opacity:.5} #answer{white-space:pre-wrap;background:#fff;border:1px solid #e3e3e3;border-radius:8px;padding:1rem;margin-top:1rem}
  .src{font-size:.9rem;margin:.3rem 0} .muted{color:#777;font-size:.85rem} .refused{border-color:#e0a800!important}
  label{font-size:.9rem;margin-left:1rem}
+ #trace{margin-top:1rem;font-size:.85rem} #trace h2{font-size:1rem;margin:.2rem 0}
+ .step{display:grid;grid-template-columns:minmax(9rem,14rem) 4.5rem 1fr;gap:.5rem;padding:.25rem 0;border-top:1px solid #eee}
+ .step .bar{height:6px;background:#714b67;border-radius:3px;margin-top:.15rem;min-width:2px} .step.err{color:#b00020}
+ .step .sum{color:#555;word-break:break-word} .gen{font-weight:600}
 </style></head><body>
 <h1>Odoo Inventory &amp; Barcode documentation assistant</h1>
 <p class="muted">Ask in English or Russian. Answers use only the Odoo 18 documentation and cite their sources.</p>
 <textarea id="q" rows="3" placeholder="How do I enable wave transfers?"></textarea>
 <div><button id="go">Ask</button><label><input type="checkbox" id="dbg"> debug</label> <span id="status" class="muted"></span></div>
-<div id="answer" hidden></div><div id="sources"></div><pre id="debug" class="muted" hidden></pre>
+<div id="answer" hidden></div><div id="sources"></div><div id="trace"></div><pre id="debug" class="muted" hidden></pre>
 <script>
 const $ = id => document.getElementById(id);
 const esc = t => String(t).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 async function ask(){
   const question = $("q").value.trim(); if(!question) return;
-  $("go").disabled = true; $("status").textContent = "thinking..."; $("sources").innerHTML = "";
+  $("go").disabled = true; $("status").textContent = "thinking..."; $("sources").innerHTML = ""; $("trace").innerHTML = "";
   try {
     const r = await fetch("/ask", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question, debug: $("dbg").checked})});
     const data = await r.json();
@@ -279,9 +287,22 @@ async function ask(){
     box.textContent = data.answer; box.className = data.refused ? "refused" : "";
     $("sources").innerHTML = data.sources.map(s => `<div class="src">[${s.n}] <a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.section)}</a>${s.cited ? "" : " <span class='muted'>(not cited)</span>"}</div>`).join("");
     $("status").textContent = `${Math.round(data.timings_ms.total)} ms, model: ${data.model}`;
+    renderTrace(data.trace);
     $("debug").hidden = !data.debug; if(data.debug) $("debug").textContent = JSON.stringify(data.debug, null, 2);
   } catch(e) { $("answer").hidden = false; $("answer").textContent = "Network error: " + e; }
   finally { $("go").disabled = false; if($("status").textContent === "thinking...") $("status").textContent = ""; }
+}
+function renderTrace(t){
+  if(!t) return;
+  const max = Math.max(1, ...t.steps.map(s => s.ms));
+  const link = t.url ? ` <a href="${esc(t.url)}" target="_blank" rel="noopener">open in Langfuse</a>` : " <span class='muted'>(Langfuse is off)</span>";
+  $("trace").innerHTML = `<h2>Trace${link}</h2>` + t.steps.map(s => {
+    const name = "&nbsp;".repeat(3 * s.depth) + esc(s.name) + (s.model ? ` <span class="muted">${esc(s.model)}</span>` : "");
+    const tok = s.tokens && s.tokens.input != null ? ` [tokens ${s.tokens.input} in / ${s.tokens.output} out]` : "";
+    return `<div class="step${s.level === "ERROR" ? " err" : ""}"><div class="${s.type === "generation" ? "gen" : ""}">${name}</div>`
+      + `<div>${Math.round(s.ms)} ms<div class="bar" style="width:${Math.max(2, 100 * s.ms / max)}%"></div></div>`
+      + `<div class="sum">${esc(s.status || s.summary)}${tok}</div></div>`;
+  }).join("");
 }
 $("go").onclick = ask; $("q").addEventListener("keydown", e => { if(e.key === "Enter" && (e.ctrlKey || e.metaKey)) ask(); });
 </script></body></html>"""

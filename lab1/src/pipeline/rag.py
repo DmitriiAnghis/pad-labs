@@ -10,16 +10,19 @@
       -> (nothing left?)  refusal without calling the LLM
       -> Generator        LLM answer with [n] citations, or refusal sentence
       -> Answer           text + sources (title, section, URL) + timings of every stage
+                          + trace (common/tracing.py: shown on the page, sent to Langfuse if configured)
 """
 from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
 
+from common import tracing
 from common.config import PipelineConfig, Settings
 from common.utils import detect_language, timer
 from filtering.filters import apply_filters
@@ -63,6 +66,7 @@ class Answer:
     language: str
     timings_ms: dict
     retrieval: RetrievalResult
+    trace: Optional[tracing.Trace] = None
 
     def to_dict(self, debug: bool = False) -> dict:
         d = {
@@ -75,6 +79,8 @@ class Answer:
             "model": self.model,
             "timings_ms": {k: round(v, 1) for k, v in self.timings_ms.items()},
         }
+        if self.trace is not None:
+            d["trace"] = self.trace.to_dict()
         if debug:
             r = self.retrieval
             d["debug"] = {
@@ -87,6 +93,19 @@ class Answer:
         return d
 
 
+_PRODUCT_RE = re.compile(r"(?:\b(?:in|for|on)\s+)?\bodoo(?:\s+\d+(?:\.\d+)?)?\b", re.I)
+
+
+def strip_added_product(text: str, question: str) -> str:
+    """Remove "in Odoo 18"-style words the LLM appended but the user never wrote: every
+    chunk is from the Odoo docs, so they only pull generic configuration pages up."""
+    text = " ".join(text.split())
+    if "odoo" in question.lower():
+        return text
+    text = " ".join(_PRODUCT_RE.sub(" ", text).split())
+    return re.sub(r"\s+([?.!,])", r"\1", text).strip(" ,")
+
+
 class RagPipeline:
     def __init__(self, settings: Settings, config: PipelineConfig, index: RagIndex) -> None:
         self.settings = settings
@@ -97,6 +116,7 @@ class RagPipeline:
         self._reranker_ready = False
         self._generator = None
         self._client = None
+        self.langfuse = tracing.LangfuseExporter.from_settings(settings)
 
     @classmethod
     def from_config(cls, settings: Settings, config: PipelineConfig) -> "RagPipeline":
@@ -116,7 +136,7 @@ class RagPipeline:
             self._generator = create_generator(self.settings, self.config.generation)
         return self._generator
 
-    def _chat(self, prompt: str, max_tokens: int, json_format: bool = False) -> str:
+    def _chat(self, prompt: str, max_tokens: int, json_format: bool = False, name: str = "llm") -> str:
         from generation.ollama_client import OllamaClient
 
         self._client = self._client or OllamaClient(self.settings)
@@ -126,6 +146,7 @@ class RagPipeline:
             max_tokens=max_tokens,
             temperature=0.0,
             json_format=json_format,
+            name=name,
         )
         return reply["text"].strip()
 
@@ -133,7 +154,7 @@ class RagPipeline:
         from generation.ollama_client import OllamaError
 
         try:
-            text = self._chat(TRANSLATE_PROMPT.format(question=query), max_tokens=120)
+            text = self._chat(TRANSLATE_PROMPT.format(question=query), max_tokens=120, name="translate")
             text = text.strip('"').splitlines()[0].strip() if text else ""
             return text or query
         except OllamaError as exc:
@@ -141,15 +162,25 @@ class RagPipeline:
             return query
 
     def _rewrite(self, query: str, language: str) -> list[str]:
-        """LLM -> 1..max_subqueries English search queries. Any failure falls back to translation."""
+        """LLM -> English search queries: the whole question, or one query per topic if it has several.
+        Any failure falls back to translation."""
         from generation.ollama_client import OllamaError
 
         n = max(1, self.config.retrieval.max_subqueries)
         try:
-            text = self._chat(REWRITE_PROMPT.format(question=query, max_queries=n), max_tokens=200, json_format=True)
+            text = self._chat(REWRITE_PROMPT.format(question=query, max_queries=n), max_tokens=200, json_format=True,
+                              name="rewrite")
             data = json.loads(text[text.find("{"): text.rfind("}") + 1])
-            queries = [q.strip() for q in data.get("queries", []) if isinstance(q, str) and q.strip()]
-            queries = list(dict.fromkeys(queries))[:n]  # no duplicates, at most n
+
+            def clean(items) -> list[str]:
+                items = [strip_added_product(q, query) for q in items if isinstance(q, str)]
+                return list(dict.fromkeys(q for q in items if q))  # no duplicates
+
+            parts = clean(data.get("queries") or [])[:n]
+            whole = clean([data.get("translation") or ""])
+            # one topic -> search the whole question only: paraphrases of one topic, fused together,
+            # pushed generic chunks above the right one (live run 2026-10-22, "storage locations")
+            queries = parts if len(parts) > 1 else (whole or parts)
             if queries:
                 return queries
             log.warning("query rewrite returned no queries: %r", text[:200])
@@ -166,21 +197,25 @@ class RagPipeline:
         def add(name: str, ms: float) -> None:
             timings[name] = timings.get(name, 0.0) + ms
 
-        with timer() as t:
+        with tracing.span("embed_query", backend=cfg.embedding.backend) as sp, timer() as t:
             query_vec = self.retriever.embed_query(query) if cfg.retrieval.mode != "bm25" else None
+            sp.output = {"dims": int(query_vec.shape[-1])} if query_vec is not None else "bm25 only"
         add("embed_query", t["ms"])
-        with timer() as t:
+        with tracing.span("retrieve", mode=cfg.retrieval.mode) as sp, timer() as t:
             retrieved = self.retriever.retrieve(query, top_k=top_k, query_vec=query_vec)
+            sp.output = _brief(retrieved)
         add("retrieve", t["ms"])
-        with timer() as t:
+        with tracing.span("filter") as sp, timer() as t:
             filtered, dropped = apply_filters(retrieved, cfg.filters)
+            sp.output = {"kept": len(filtered), "dropped": dropped}
         add("filter", t["ms"])
 
         # copies, so reranking does not change the retriever's list (needed for debugging/eval)
         pool = [Candidate(c.idx, c.chunk, c.score, c.rank, c.source, dict(c.scores)) for c in filtered]
         if self.reranker is not None and pool:
-            with timer() as t:
+            with tracing.span("rerank", backend=cfg.reranker.backend) as sp, timer() as t:
                 pool = self.reranker.rerank(query, pool)
+                sp.output = _brief(pool[: cfg.reranker.top_n], "rerank")
             add("rerank", t["ms"])
             if cfg.reranker.min_score is not None:
                 kept = [c for c in pool if c.scores.get("rerank", 0.0) >= cfg.reranker.min_score]
@@ -219,30 +254,54 @@ class RagPipeline:
         timings: dict[str, float] = {}
         language = detect_language(query)
         queries = [query]
-        if cfg.retrieval.rewrite_query:
-            with timer() as t:
-                queries = self._rewrite(query, language)
-            timings["rewrite"] = t["ms"]
-        elif language != "en" and cfg.retrieval.translate_query:
-            with timer() as t:
-                queries = [self._translate(query)]
-            timings["translate"] = t["ms"]
+        with tracing.span("query", input=query) as sp:
+            if cfg.retrieval.rewrite_query:
+                with timer() as t:
+                    queries = self._rewrite(query, language)
+                timings["rewrite"] = t["ms"]
+            elif language != "en" and cfg.retrieval.translate_query:
+                with timer() as t:
+                    queries = [self._translate(query)]
+                timings["translate"] = t["ms"]
+            sp.output = {"language": language, "queries": queries}
 
-        results = [self._search(q, top_k, timings) for q in queries]
+        results = []
+        for q in queries:
+            with tracing.span("search", input=q) as sp:
+                results.append(self._search(q, top_k, timings))
+                sp.output = _brief(results[-1][3], "rerank")
         dropped = [d for res in results for d in res[2]]
         query_vec = results[0][4]
         if len(results) == 1:
             retrieved, filtered, _, reranked, _ = results[0]
         else:  # one ranked list per stage, so per-stage metrics stay meaningful
-            retrieved = self._fuse([res[0] for res in results], top_k or cfg.retrieval.top_k)
-            filtered = self._fuse([res[1] for res in results], top_k or cfg.retrieval.top_k)
-            reranked = self._fuse([res[3] for res in results], cfg.reranker.top_n)
+            with tracing.span("fuse", sub_queries=len(results)) as sp:
+                retrieved = self._fuse([res[0] for res in results], top_k or cfg.retrieval.top_k)
+                filtered = self._fuse([res[1] for res in results], top_k or cfg.retrieval.top_k)
+                reranked = self._fuse([res[3] for res in results], cfg.reranker.top_n)
+                sp.output = _brief(reranked, "subquery_rrf")
         search_query = " | ".join(queries)
         return RetrievalResult(query, language, search_query, retrieved, filtered, dropped, reranked, timings,
                                query_vec, queries)
 
     # ------------------------------------------------------------------ answer
     def answer(self, query: str) -> Answer:
+        meta = {"index": self.index.key, "llm": self.config.generation.model or self.settings.llm_model,
+                "prompt": self.config.generation.prompt, "reranker": self.config.reranker.backend}
+        with tracing.trace("rag-answer", input=query, metadata=meta, on_end=self._finish_trace) as tr:
+            ans = self._answer(query)
+            tr.output = ans.text
+            tr.tags += [ans.language, "refused" if ans.refused else "answered"]
+            tr.metadata.update(refusal_reason=ans.refusal_reason,
+                               sources=[s["chunk_id"] for s in ans.sources], timings_ms=ans.timings_ms)
+            ans.trace = tr
+        return ans
+
+    def _finish_trace(self, tr: tracing.Trace) -> None:
+        if self.langfuse is not None:
+            self.langfuse.send(tr)
+
+    def _answer(self, query: str) -> Answer:
         with timer() as total:
             r = self.retrieve(query)
             language = self.config.generation.answer_language
@@ -251,6 +310,8 @@ class RagPipeline:
             if not r.reranked:
                 text = REFUSAL.get(language, REFUSAL["en"])
                 ans = Answer(query, text, True, "no_relevant_context", [], "none", language, timings, r)
+                with tracing.span("refuse", reason="no_relevant_context") as sp:
+                    sp.output = text  # nothing left after the filters: the LLM is not called
             else:
                 with timer() as t:
                     gen = self.generator.generate(query, r.reranked, language)
@@ -275,3 +336,10 @@ class RagPipeline:
                 ans = Answer(query, gen.text, gen.refused, "llm_refused" if gen.refused else None, sources, gen.model, language, timings, r)
         ans.timings_ms["total"] = total["ms"]
         return ans
+
+
+def _brief(cands: list[Candidate], score: str | None = None) -> list[dict]:
+    """Ranked chunks for a trace: ids and scores, no texts (the texts are in the LLM prompt)."""
+    return [{"rank": n, "chunk_id": c.chunk["chunk_id"], "section": c.chunk["section"],
+             "score": round(float(c.scores.get(score, c.score) if score else c.score), 4)}
+            for n, c in enumerate(cands, start=1)]

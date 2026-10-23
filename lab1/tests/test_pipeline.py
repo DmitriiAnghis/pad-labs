@@ -147,3 +147,20 @@ def test_rewrite_keeps_at_most_max_subqueries(pipeline):
     pipeline.config = pipeline.config.with_overrides({"retrieval": {"rewrite_query": True, "max_subqueries": 2}})
     pipeline._client = FakeClient('{"queries": ["wave", "wave", "rfid", "fefo"]}')
     assert pipeline.retrieve("wave, rfid and fefo?").sub_queries == ["wave", "rfid"]
+
+
+def test_rewrite_single_topic_searches_only_the_whole_question(pipeline):
+    pipeline.config = pipeline.config.with_overrides({"retrieval": {"rewrite_query": True}})
+    pipeline._client = FakeClient('{"translation": "How do I enable wave transfers in Odoo 18?", '
+                                  '"queries": ["wave transfers Odoo 18 Inventory"]}')
+    r = pipeline.retrieve("Как включить волновые перемещения?")
+    # one topic: the paraphrase is not searched, and the product/version the user never wrote is removed
+    assert r.sub_queries == ["How do I enable wave transfers?"]
+    assert r.reranked[0].chunk["doc_id"] == "inventory/wave"
+
+
+def test_rewrite_keeps_odoo_when_the_user_wrote_it(pipeline):
+    pipeline.config = pipeline.config.with_overrides({"retrieval": {"rewrite_query": True}})
+    pipeline._client = FakeClient('{"translation": "Which RFID encoding does Odoo support?", "queries": []}')
+    assert pipeline.retrieve("Which RFID encoding does Odoo support?").sub_queries == [
+        "Which RFID encoding does Odoo support?"]
