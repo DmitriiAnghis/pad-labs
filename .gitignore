@@ -29,3 +29,4 @@ Thumbs.db
 
 # Lab 2
 lab2/**/*.db
+lab2/.env

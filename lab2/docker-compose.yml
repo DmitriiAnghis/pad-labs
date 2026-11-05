@@ -1,0 +1,165 @@
+# Вся система лабы 2 одной командой:
+#   python scripts/init_env.py      # один раз: создать .env с паролями и ключом JWT
+#   docker compose up --build
+# Снаружи открыт только gateway: http://localhost:8080. Порты 8001-8007 открыты лишь на
+# 127.0.0.1, чтобы смотреть Swagger каждого сервиса (/docs) при разработке.
+# Сервисы обращаются друг к другу по имени (http://inventory-service:8000), не по localhost:
+# в Kubernetes (лаба 3) эти же имена станут объектами Service.
+
+x-service: &service
+  restart: unless-stopped
+  depends_on:
+    postgres: { condition: service_healthy }
+    rabbitmq: { condition: service_healthy }
+
+x-env: &common-env
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_FORMAT: json
+  AUTH_PUBLIC_KEY_URL: http://auth-service:8000/auth/public-key
+  RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+  HTTP_TIMEOUT: "2.0"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run scripts/init_env.py}
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD}
+      CATALOG_DB_PASSWORD: ${CATALOG_DB_PASSWORD}
+      INVENTORY_DB_PASSWORD: ${INVENTORY_DB_PASSWORD}
+      ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD}
+      FULFILLMENT_DB_PASSWORD: ${FULFILLMENT_DB_PASSWORD}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init-dbs.sh:/docker-entrypoint-initdb.d/init-dbs.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-warehouse}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?run scripts/init_env.py}
+    ports:
+      - "127.0.0.1:15672:15672"   # веб-панель RabbitMQ: очереди, сообщения, DLQ
+    volumes:
+      - rabbitdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  auth-service:
+    <<: *service
+    image: pad/auth-service
+    build: { context: ., dockerfile: services/auth-service/Dockerfile }
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      <<: *common-env
+      RABBITMQ_URL: ""   # auth-service событий не отправляет и не получает
+      DATABASE_URL: postgresql+psycopg://auth:${AUTH_DB_PASSWORD}@postgres:5432/auth_db
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?run scripts/init_env.py}
+    ports: ["127.0.0.1:8001:8000"]
+
+  catalog-service:
+    <<: *service
+    image: pad/catalog-service
+    build: { context: ., dockerfile: services/catalog-service/Dockerfile }
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      <<: *common-env
+      RABBITMQ_URL: ""
+      DATABASE_URL: postgresql+psycopg://catalog:${CATALOG_DB_PASSWORD}@postgres:5432/catalog_db
+    ports: ["127.0.0.1:8002:8000"]
+
+  inventory-service:
+    <<: *service
+    image: pad/inventory-service
+    build: { context: ., dockerfile: services/inventory-service/Dockerfile }
+    environment:
+      <<: *common-env
+      DATABASE_URL: postgresql+psycopg://inventory:${INVENTORY_DB_PASSWORD}@postgres:5432/inventory_db
+      CATALOG_URL: http://catalog-service:8000
+    ports: ["127.0.0.1:8003:8000"]
+
+  order-service:
+    <<: *service
+    image: pad/order-service
+    build: { context: ., dockerfile: services/order-service/Dockerfile }
+    environment:
+      <<: *common-env
+      DATABASE_URL: postgresql+psycopg://orders:${ORDER_DB_PASSWORD}@postgres:5432/orders_db
+      INVENTORY_URL: http://inventory-service:8000
+    ports: ["127.0.0.1:8004:8000"]
+
+  fulfillment-service:
+    <<: *service
+    image: pad/fulfillment-service
+    build: { context: ., dockerfile: services/fulfillment-service/Dockerfile }
+    environment:
+      <<: *common-env
+      DATABASE_URL: postgresql+psycopg://fulfillment:${FULFILLMENT_DB_PASSWORD}@postgres:5432/fulfillment_db
+    ports: ["127.0.0.1:8005:8000"]
+
+  notification-service:
+    <<: *service
+    image: pad/notification-service
+    build: { context: ., dockerfile: services/notification-service/Dockerfile }
+    environment:
+      <<: *common-env
+      DATABASE_URL: postgresql+psycopg://notification:${NOTIFICATION_DB_PASSWORD}@postgres:5432/notification_db
+    ports: ["127.0.0.1:8006:8000"]
+
+  # RAG из лабы 1: indexer один раз строит индекс в томе rag-data, assistant его читает.
+  rag-indexer:
+    image: pad/rag
+    build: { context: .., dockerfile: lab2/services/rag-assistant/Dockerfile }
+    command: ["sh", "./index.sh"]
+    environment:
+      SERVICE_NAME: rag-indexer
+      LOG_FORMAT: json
+    volumes: [rag-data:/data]
+    restart: "no"
+
+  rag-assistant:
+    image: pad/rag
+    restart: unless-stopped
+    depends_on:
+      rag-indexer: { condition: service_completed_successfully }
+    environment:
+      SERVICE_NAME: rag-assistant
+      LOG_FORMAT: json
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      LLM_MODEL: ${LLM_MODEL:-qwen3.5:9b}
+      READY_REQUIRES_LLM: "false"
+    extra_hosts: ["host.docker.internal:host-gateway"]   # на Linux; в Docker Desktop это имя есть и так
+    volumes: [rag-data:/data]
+    ports: ["127.0.0.1:8007:8000"]
+
+  gateway:
+    image: pad/gateway
+    build: { context: ., dockerfile: gateway/Dockerfile }
+    restart: unless-stopped
+    depends_on:
+      auth-service: { condition: service_started }
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: json
+      AUTH_PUBLIC_KEY_URL: http://auth-service:8000/auth/public-key
+      RATE_LIMIT_PER_MINUTE: "300"
+    ports: ["8080:8000"]
+
+volumes:
+  pgdata:
+  rabbitdata:
+  rag-data:
