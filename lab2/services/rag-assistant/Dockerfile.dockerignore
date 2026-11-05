@@ -1,0 +1,8 @@
+# Используется при сборке из корня репозитория (BuildKit берёт <Dockerfile>.dockerignore).
+**
+!lab1/requirements.txt
+!lab1/run.py
+!lab1/configs/**
+!lab1/src/**
+!lab2/services/rag-assistant/index.sh
+**/__pycache__
