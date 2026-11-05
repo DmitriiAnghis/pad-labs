@@ -23,7 +23,7 @@ import httpx
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
-from pad_common.auth import PublicKeyProvider, decode_token
+from pad_common.auth import PublicKeyProvider
 from pad_common.errors import AppError, Unauthorized, error_body
 from pad_common.logging import log_event, request_id_var, setup_logging
 
@@ -122,8 +122,7 @@ def build_app(settings: Settings | None = None, transport: httpx.AsyncBaseTransp
             if scheme.lower() != "bearer" or not token:
                 return err(401, "unauthorized", "missing bearer token")
             try:
-                key = await asyncio.to_thread(keys.get)
-                claims = decode_token(token.strip(), key, settings.jwt_issuer, settings.jwt_audience)
+                claims = await asyncio.to_thread(keys.decode, token.strip())
             except Unauthorized as exc:
                 return err(401, exc.code, exc.message)
             except AppError as exc:

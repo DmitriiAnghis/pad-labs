@@ -64,6 +64,22 @@ class PublicKeyProvider:
     def reset(self) -> None:
         self._key = self.settings.jwt_public_key.replace("\\n", "\n") or None
 
+    def decode(self, token: str) -> dict:
+        """Проверить токен. Если подпись не сошлась, а ключ был скачан у auth-service, ключ мог
+        смениться (auth-service перезапущен без JWT_PRIVATE_KEY): скачиваем заново и пробуем ещё раз."""
+        s = self.settings
+        try:
+            return decode_token(token, self.get(), s.jwt_issuer, s.jwt_audience)
+        except Unauthorized as exc:
+            if exc.code != "invalid_token" or s.jwt_public_key:
+                raise
+            old = self._key
+            self.reset()
+            if self.get() == old:
+                raise
+            log.info("JWT public key changed, reloaded from auth-service")
+            return decode_token(token, self._key, s.jwt_issuer, s.jwt_audience)
+
 
 def decode_token(token: str, public_key: str, issuer: str, audience: str) -> dict:
     try:
@@ -85,9 +101,8 @@ def bearer_token(request: Request) -> str:
 
 def principal_from_request(request: Request) -> Principal:
     provider: PublicKeyProvider = request.app.state.key_provider
-    settings: BaseServiceSettings = request.app.state.settings
     token = bearer_token(request)
-    claims = decode_token(token, provider.get(), settings.jwt_issuer, settings.jwt_audience)
+    claims = provider.decode(token)
     if claims.get("typ", "access") != "access":
         raise Unauthorized("not an access token", code="invalid_token")
     return Principal(user_id=str(claims["sub"]), username=claims.get("username", ""),
