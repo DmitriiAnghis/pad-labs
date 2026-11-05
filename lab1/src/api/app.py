@@ -34,7 +34,10 @@ from common.logging_setup import log_event, request_id_var, setup_logging
 
 log = logging.getLogger("api")
 
-SERVICE = "rag-lab1"
+SERVICE = os.environ.get("SERVICE_NAME", "rag-lab1")
+# Лаба 2: если false, недоступная Ollama не делает сервис «неготовым» (/search работает без LLM),
+# а только помечается в /ready как degraded; /ask в этом случае отвечает 503.
+READY_REQUIRES_LLM = os.environ.get("READY_REQUIRES_LLM", "true").strip().lower() in ("1", "true", "yes")
 VERSION = "1.0.0"
 
 
@@ -167,7 +170,10 @@ def ready():
 
             up, info = OllamaClient(state.settings).health()
             checks["ollama"] = {"ok": up, "detail": info, "url": state.settings.ollama_url}
-            ok = ok and up
+            if READY_REQUIRES_LLM:
+                ok = ok and up
+            elif not up:
+                checks["ollama"]["degraded"] = True
     body = {"status": "ready" if ok else "not_ready", "checks": checks}
     return JSONResponse(body, status_code=200 if ok else 503)
 

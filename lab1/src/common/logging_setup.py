@@ -6,11 +6,13 @@ from __future__ import annotations
 
 import contextvars
 import json
+import os
 import logging
 import sys
 import time
 
-SERVICE_NAME = "rag-lab1"
+# Имя сервиса в логах. В лабе 2 тот же код работает как rag-assistant / rag-indexer.
+SERVICE_NAME = os.environ.get("SERVICE_NAME", "rag-lab1")
 request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="-")
 
 
