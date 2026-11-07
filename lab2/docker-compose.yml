@@ -58,7 +58,7 @@ services:
 
   auth-service:
     <<: *service
-    image: pad/auth-service
+    image: pad/auth-service:${IMAGE_TAG:-1.0.0}
     build: { context: ., dockerfile: services/auth-service/Dockerfile }
     depends_on:
       postgres: { condition: service_healthy }
@@ -72,7 +72,7 @@ services:
 
   catalog-service:
     <<: *service
-    image: pad/catalog-service
+    image: pad/catalog-service:${IMAGE_TAG:-1.0.0}
     build: { context: ., dockerfile: services/catalog-service/Dockerfile }
     depends_on:
       postgres: { condition: service_healthy }
@@ -84,7 +84,7 @@ services:
 
   inventory-service:
     <<: *service
-    image: pad/inventory-service
+    image: pad/inventory-service:${IMAGE_TAG:-1.0.0}
     build: { context: ., dockerfile: services/inventory-service/Dockerfile }
     environment:
       <<: *common-env
@@ -94,7 +94,7 @@ services:
 
   order-service:
     <<: *service
-    image: pad/order-service
+    image: pad/order-service:${IMAGE_TAG:-1.0.0}
     build: { context: ., dockerfile: services/order-service/Dockerfile }
     environment:
       <<: *common-env
@@ -104,7 +104,7 @@ services:
 
   fulfillment-service:
     <<: *service
-    image: pad/fulfillment-service
+    image: pad/fulfillment-service:${IMAGE_TAG:-1.0.0}
     build: { context: ., dockerfile: services/fulfillment-service/Dockerfile }
     environment:
       <<: *common-env
@@ -113,7 +113,7 @@ services:
 
   notification-service:
     <<: *service
-    image: pad/notification-service
+    image: pad/notification-service:${IMAGE_TAG:-1.0.0}
     build: { context: ., dockerfile: services/notification-service/Dockerfile }
     environment:
       <<: *common-env
@@ -122,7 +122,7 @@ services:
 
   # RAG из лабы 1: indexer один раз строит индекс в томе rag-data, assistant его читает.
   rag-indexer:
-    image: pad/rag
+    image: pad/rag:${IMAGE_TAG:-1.0.0}
     build: { context: .., dockerfile: lab2/services/rag-assistant/Dockerfile }
     command: ["sh", "./index.sh"]
     environment:
@@ -132,7 +132,7 @@ services:
     restart: "no"
 
   rag-assistant:
-    image: pad/rag
+    image: pad/rag:${IMAGE_TAG:-1.0.0}
     restart: unless-stopped
     depends_on:
       rag-indexer: { condition: service_completed_successfully }
@@ -147,7 +147,7 @@ services:
     ports: ["127.0.0.1:8007:8000"]
 
   gateway:
-    image: pad/gateway
+    image: pad/gateway:${IMAGE_TAG:-1.0.0}
     build: { context: ., dockerfile: gateway/Dockerfile }
     restart: unless-stopped
     depends_on:
