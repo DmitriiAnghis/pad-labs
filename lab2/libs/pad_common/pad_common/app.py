@@ -5,8 +5,9 @@
   * логи в JSON с request_id; заголовок X-Request-ID в каждом ответе;
   * единый формат ошибок без stack trace (pad_common.errors);
   * GET /health  - процесс жив (liveness), ничего не проверяет, отвечает сразу;
-  * GET /ready   - сервис может принимать запросы (readiness): база отвечает и, если сервис
-                   работает с событиями, есть соединение с RabbitMQ; иначе 503;
+  * GET /ready   - сервис может принимать запросы (readiness): база отвечает; иначе 503.
+                   Соединение с RabbitMQ показывается в ответе, но не обязательно: без брокера
+                   ответ 200 со статусом degraded (события ждут в outbox);
   * при старте создаёт таблицы (с повторами, пока PostgreSQL поднимается) и запускает EventBus.
 Получается: объект FastAPI, к которому сервис добавляет свои роутеры.
 Зачем: семь сервисов ведут себя одинаково, а различаются только бизнес-логикой.
@@ -109,12 +110,20 @@ def create_service(settings: BaseServiceSettings, *, title: str, description: st
         ok_db, detail = db.ping()
         checks["database"] = {"ok": ok_db, "detail": detail}
         if bus.enabled:
-            checks["rabbitmq"] = {"ok": bus.is_connected(), "detail": "connected" if bus.is_connected() else "not connected"}
+            # RabbitMQ показывается, но не делает сервис неготовым: события пишутся в outbox и
+            # уйдут, когда брокер вернётся. Иначе при падении брокера Kubernetes убрал бы из
+            # Service все копии order/inventory/fulfillment/notification, и система перестала бы
+            # отвечать даже на запросы, которым брокер не нужен (лаба 3, DECISIONS.md).
+            connected = bus.is_connected()
+            checks["rabbitmq"] = {"ok": connected, "required": False,
+                                  "detail": "connected" if connected else "not connected, events wait in outbox"}
         for name, fn in app.state.ready_checks.items():
             ok, d = fn()
             checks[name] = {"ok": ok, "detail": d}
-        ok = all(c["ok"] for c in checks.values())
-        return JSONResponse({"status": "ready" if ok else "not_ready", "service": settings.service_name, "checks": checks},
+        ok = all(c["ok"] for c in checks.values() if c.get("required", True))
+        degraded = ok and not all(c["ok"] for c in checks.values())
+        status = "degraded" if degraded else ("ready" if ok else "not_ready")
+        return JSONResponse({"status": status, "service": settings.service_name, "checks": checks},
                             status_code=200 if ok else 503)
 
     return app

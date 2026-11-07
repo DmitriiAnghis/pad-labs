@@ -72,3 +72,22 @@ def test_failed_handler_does_not_mark_event_processed():
         handle_once(db, e, broken)
     with db.session() as s:
         assert s.get(ProcessedEvent, e.event_id) is None  # повтор обработает событие заново
+
+
+def test_ready_is_degraded_but_200_without_rabbitmq(tmp_path):
+    """Брокер недоступен: /ready = 200 со статусом degraded, Kubernetes не убирает сервис из Service.
+    База недоступна по-прежнему даёт 503 (проверяется в тестах сервисов)."""
+    from fastapi.testclient import TestClient
+
+    from pad_common.app import create_service
+    from pad_common.config import BaseServiceSettings
+
+    settings = BaseServiceSettings(database_url=f"sqlite:///{tmp_path}/t.db",
+                                   rabbitmq_url="amqp://guest:guest@127.0.0.1:1/")  # порт 1: соединения не будет
+    with TestClient(create_service(settings, title="t", description="t")) as client:
+        r = client.get("/ready")
+    body = r.json()
+    assert r.status_code == 200
+    assert body["status"] == "degraded"
+    assert body["checks"]["rabbitmq"] == {"ok": False, "required": False,
+                                          "detail": "not connected, events wait in outbox"}
