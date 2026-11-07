@@ -6,7 +6,7 @@
 |---|---|---|
 | [lab1](lab1/README.md) | RAG-система по документации Odoo 18 Inventory + Barcode | готова, эксперименты с LLM запускаются на ПК |
 | [lab2](lab2/README.md) | складская система: 7 микросервисов + gateway, RabbitMQ, PostgreSQL, RAG из lab1 как сервис | код и тесты готовы, RAG проверить на ПК |
-| lab3 | контейнеризация и Kubernetes для lab2 | — |
+| [lab3](lab3/README.md) | Docker-образы всех сервисов lab2 и развёртывание в Kubernetes (Minikube): Deployment, Service, ConfigMap, Secret, пробы, ресурсы, масштабирование | манифесты проверены в тестовом кластере, на ПК пройти шаги README |
 
 Быстрый старт lab1 (Windows, PowerShell):
 
