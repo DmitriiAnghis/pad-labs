@@ -1,0 +1,14 @@
+# PVC (PersistentVolumeClaim, запрос на постоянный диск) rag-data: том для RAG из лабы 1.
+# rag-indexer пишет сюда документацию Odoo (.rst), chunks, индекс FAISS и BM25, модель MiniLM;
+# rag-assistant читает. Данные переживают удаление Pod-ов, повторная индексация не нужна.
+# ReadWriteOnce: том подключается к одному узлу. В Minikube узел один, поэтому Job и
+# Deployment могут пользоваться им одновременно.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rag-data
+  labels: { app.kubernetes.io/name: rag, app.kubernetes.io/part-of: pad-warehouse }
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests: { storage: 3Gi }

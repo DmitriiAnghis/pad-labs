@@ -1,0 +1,17 @@
+# Service fulfillment-service: постоянное имя и адрес для всех копий (Pod-ов) fulfillment-service.
+# Pod-ы пересоздаются и меняют IP; Service находит их по метке app.kubernetes.io/name и делит
+# запросы между теми, кто прошёл readinessProbe. Другие сервисы обращаются по
+# http://fulfillment-service:8000 (это имя из ConfigMap pad-config), а не по localhost.
+# Тип ClusterIP: адрес виден только внутри кластера. Снаружи сервис доступен только через gateway.
+apiVersion: v1
+kind: Service
+metadata:
+  name: fulfillment-service
+  labels: { app.kubernetes.io/name: fulfillment-service, app.kubernetes.io/part-of: pad-warehouse }
+spec:
+  type: ClusterIP
+  selector: { app.kubernetes.io/name: fulfillment-service }
+  ports:
+    - name: http
+      port: 8000          # порт Service (по нему обращаются другие)
+      targetPort: http    # порт контейнера (containerPort с именем http)

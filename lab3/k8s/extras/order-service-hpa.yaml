@@ -1,0 +1,25 @@
+# ДОПОЛНИТЕЛЬНО (не входит в kubectl apply -k lab3/k8s): автоматическое масштабирование.
+# HPA (HorizontalPodAutoscaler) сам меняет число копий order-service от 2 до 5 так, чтобы
+# средняя загрузка CPU была около 70% от requests (50m). Нужен metrics-server:
+#   minikube addons enable metrics-server
+#   kubectl apply -f lab3/k8s/extras/order-service-hpa.yaml
+#   kubectl get hpa -n pad -w
+# Пока HPA включён, ручной kubectl scale для order-service бесполезен: HPA вернёт своё число.
+# Выключить: kubectl delete hpa order-service -n pad
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: order-service
+  namespace: pad
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: order-service
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }

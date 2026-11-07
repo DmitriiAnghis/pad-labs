@@ -1,0 +1,94 @@
+# catalog-service: справочник товаров.
+# Deployment описывает, какой образ запускать, сколько копий (Pod-ов) держать, какие переменные
+# окружения дать, сколько CPU и памяти разрешить и как проверять, что сервис жив и готов.
+# Если Pod упадёт или его удалят, Deployment (через ReplicaSet) сразу создаст новый.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog-service
+  labels: { app.kubernetes.io/name: catalog-service, app.kubernetes.io/part-of: pad-warehouse }
+spec:
+  # 1 копия: нагрузка маленькая.
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels: { app.kubernetes.io/name: catalog-service }
+  # Обновление без простоя: сначала поднимается новая копия, старая гасится только когда новая
+  # прошла readinessProbe (maxUnavailable: 0).
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: catalog-service, app.kubernetes.io/part-of: pad-warehouse }
+    spec:
+      automountServiceAccountToken: false   # сервису не нужен доступ к API Kubernetes
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001                    # пользователь app из Dockerfile
+        runAsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      terminationGracePeriodSeconds: 20
+      containers:
+        - name: catalog-service
+          # Образ собран локально внутри Minikube (lab3/scripts/build-images.ps1), поэтому
+          # IfNotPresent: не пытаться скачать его из Docker Hub. Тег версии, а не latest:
+          # для latest Kubernetes по умолчанию всегда идёт в реестр.
+          image: pad/catalog-service:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 8000 }
+          # Все ключи ConfigMap pad-config становятся переменными окружения.
+          envFrom:
+            - configMapRef: { name: pad-config }
+          env:
+            # Пароль базы из Secret; затем строка подключения собирается из него и адреса из ConfigMap.
+            # $(ИМЯ) Kubernetes заменяет значением переменной, объявленной выше.
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: pad-secrets, key: CATALOG_DB_PASSWORD } }
+            - name: DATABASE_URL
+              value: "postgresql+psycopg://catalog:$(DB_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/catalog_db"
+            - name: RABBITMQ_URL     # этот сервис событий не отправляет и не получает
+              value: ""
+          # Пробы (проверки здоровья). Все три ходят HTTP GET на порт 8000 внутри Pod-а.
+          # startupProbe: пока сервис стартует (ждёт базу, создаёт таблицы), остальные пробы
+          #   не выполняются; до 30 x 2 с = 60 с на старт, потом контейнер перезапускается.
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
+          # livenessProbe: /health отвечает, пока процесс жив. 3 неудачи подряд = перезапуск
+          #   контейнера. Базу не проверяет: перезапуск не лечит упавшую базу.
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # readinessProbe: /ready проверяет базу. Не готов = Pod
+          #   временно убирается из Service, запросы идут в другие копии; контейнер не перезапускается.
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # requests: сколько ресурсов гарантировать (по ним планировщик выбирает узел).
+          # limits: потолок. CPU выше лимита притормаживается, память выше лимита = OOMKilled.
+          # 100m = 0,1 ядра процессора; Mi = мебибайт. Замеры: lab3/DECISIONS.md, раздел 7.
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          # Перед остановкой Pod-а подождать 5 с: за это время Kubernetes успевает убрать Pod из
+          # Service, и новые запросы перестают на него приходить. Без паузы при обновлении
+          # часть запросов попадала на уже останавливающийся Pod (проверено, lab3/DECISIONS.md, раздел 12).
+          lifecycle:
+            preStop:
+              exec: { command: ["sleep", "5"] }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true      # код в образе менять нельзя; запись только в /tmp
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }

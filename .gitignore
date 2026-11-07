@@ -30,3 +30,6 @@ Thumbs.db
 # Lab 2
 lab2/**/*.db
 lab2/.env
+
+# Lab 3: реальные секреты Kubernetes (создаёт lab3/scripts/make_secrets.py)
+lab3/k8s/secrets/secrets.env

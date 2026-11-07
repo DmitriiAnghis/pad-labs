@@ -1,0 +1,11 @@
+# Service rag-assistant: gateway пересылает сюда /api/assistant/... (RAG_URL в ConfigMap pad-config).
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-assistant
+  labels: { app.kubernetes.io/name: rag-assistant, app.kubernetes.io/part-of: pad-warehouse }
+spec:
+  type: ClusterIP
+  selector: { app.kubernetes.io/name: rag-assistant }
+  ports:
+    - { name: http, port: 8000, targetPort: http }

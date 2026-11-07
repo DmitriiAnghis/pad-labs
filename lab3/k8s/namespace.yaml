@@ -1,0 +1,8 @@
+# Namespace (пространство имён) pad: все объекты лабы лежат в нём отдельно от системных
+# (kube-system и т.д.). Удалить всю систему целиком: kubectl delete namespace pad.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pad
+  labels:
+    app.kubernetes.io/part-of: pad-warehouse
