@@ -1,0 +1,25 @@
+# Ingress: правило для входного HTTP-прокси кластера (в Minikube это ingress-nginx,
+# включается командой minikube addons enable ingress). Все запросы на хост pad.local
+# уходят в Service gateway. Без включённого addon объект просто лежит без адреса и ничему не мешает.
+# Проверка: curl http://pad.local/api/status  (pad.local прописать в hosts, см. lab3/README.md).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gateway
+  labels: { app.kubernetes.io/name: gateway, app.kubernetes.io/part-of: pad-warehouse }
+  annotations:
+    # ассистент отвечает до 2 минут (LLM), стандартные 60 с прокси оборвали бы ответ
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "180"
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: pad.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port: { name: http }

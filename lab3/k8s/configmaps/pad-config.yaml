@@ -1,0 +1,38 @@
+# ConfigMap pad-config: настройки без секретов, общие для сервисов лабы 2.
+# Берёт: этот файл. Делает: Kubernetes кладёт каждую пару ключ-значение в переменную окружения
+# контейнера (envFrom в Deployment). Получается: сервис читает LOG_LEVEL, CATALOG_URL и т.д.
+# так же, как в docker compose, но значения живут вне образа.
+# Зачем: поменять уровень логов или адрес сервиса можно без пересборки образа:
+#   kubectl edit configmap pad-config -n pad
+#   kubectl rollout restart deployment -n pad      # переменные окружения читаются только при старте
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pad-config
+  labels:
+    app.kubernetes.io/part-of: pad-warehouse
+data:
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"            # логи строкой JSON: kubectl logs и сборщики логов разбирают поля
+  HTTP_TIMEOUT: "2.0"           # секунды на синхронный запрос к другому сервису
+
+  # Адреса баз и брокера: имена объектов Service (см. infrastructure/), не localhost и не IP.
+  DATABASE_HOST: "postgres"
+  DATABASE_PORT: "5432"
+  RABBITMQ_HOST: "rabbitmq"
+  RABBITMQ_PORT: "5672"
+
+  # Адреса сервисов. Внутри кластера DNS (служба имён) превращает имя Service в его IP;
+  # полное имя order-service.pad.svc.cluster.local, внутри namespace pad хватает короткого.
+  AUTH_PUBLIC_KEY_URL: "http://auth-service:8000/auth/public-key"
+  AUTH_URL: "http://auth-service:8000"
+  CATALOG_URL: "http://catalog-service:8000"
+  INVENTORY_URL: "http://inventory-service:8000"
+  ORDER_URL: "http://order-service:8000"
+  FULFILLMENT_URL: "http://fulfillment-service:8000"
+  NOTIFICATION_URL: "http://notification-service:8000"
+  RAG_URL: "http://rag-assistant:8000"
+
+  # gateway: запросов в минуту на одного пользователя. Счётчик хранится в памяти каждой копии
+  # gateway, поэтому при 2 копиях фактический предел до 2 раз выше (см. lab3/DECISIONS.md).
+  RATE_LIMIT_PER_MINUTE: "300"

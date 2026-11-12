@@ -1,0 +1,45 @@
+# rag-indexer: разовая задача (Job), а не постоянный сервис. Запускает lab2/services/rag-assistant/index.sh:
+#   models download minilm -> grab (скачать .rst из github.com/odoo/documentation) -> process -> index.
+# В конце пишет метку /data/.index-ready; rag-assistant ждёт её и только потом стартует.
+# Job завершается со статусом Complete; при ошибке Kubernetes повторит до backoffLimit раз.
+# Переиндексировать (документация обновилась):
+#   kubectl delete job rag-indexer -n pad && kubectl apply -k lab3/k8s
+# (grabber скачает только изменённые файлы, см. лабу 1).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rag-indexer
+  labels: { app.kubernetes.io/name: rag-indexer, app.kubernetes.io/part-of: pad-warehouse }
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: rag-indexer, app.kubernetes.io/part-of: pad-warehouse }
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001          # файлы на томе rag-data принадлежат группе 10001, пользователь app может писать
+      containers:
+        - name: rag-indexer
+          image: pad/rag:1.0.0
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "./index.sh"]
+          envFrom:
+            - configMapRef: { name: rag-config }
+          env:
+            - { name: SERVICE_NAME, value: rag-indexer }
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+            limits: { cpu: "2", memory: 3Gi }     # эмбеддинги MiniLM для всех chunks
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: rag-data }

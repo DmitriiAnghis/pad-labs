@@ -1,0 +1,54 @@
+# kustomization.yaml: список всех манифестов лабы 3 для одной команды
+#   kubectl apply -k lab3/k8s
+# kustomize (встроен в kubectl) собирает файлы ниже в один набор, ставит всем namespace pad
+# и создаёт Secret pad-secrets из secrets/secrets.env (файл не в Git, его делает
+# lab3/scripts/make_secrets.py). Посмотреть итоговый YAML без применения: kubectl kustomize lab3/k8s
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: pad
+
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: kustomize
+
+resources:
+  - namespace.yaml
+  # настройки
+  - configmaps/pad-config.yaml
+  - configmaps/rag-config.yaml
+  - configmaps/postgres-init.yaml
+  # инфраструктура: база и брокер
+  - infrastructure/postgres.yaml
+  - infrastructure/rabbitmq.yaml
+  # бизнес-сервисы и gateway
+  - deployments/auth-service.yaml
+  - deployments/catalog-service.yaml
+  - deployments/inventory-service.yaml
+  - deployments/order-service.yaml
+  - deployments/fulfillment-service.yaml
+  - deployments/notification-service.yaml
+  - deployments/gateway.yaml
+  - services/auth-service.yaml
+  - services/catalog-service.yaml
+  - services/inventory-service.yaml
+  - services/order-service.yaml
+  - services/fulfillment-service.yaml
+  - services/notification-service.yaml
+  - services/gateway.yaml
+  # RAG из лабы 1
+  - storage/rag-data-pvc.yaml
+  - jobs/rag-indexer.yaml
+  - deployments/rag-assistant.yaml
+  - services/rag-assistant.yaml
+  # вход снаружи
+  - ingress/gateway-ingress.yaml
+
+secretGenerator:
+  - name: pad-secrets
+    envs:
+      - secrets/secrets.env
+    type: Opaque
+    options:
+      # Имя без суффикса-хэша: Secret всегда называется pad-secrets, как в образце
+      # secrets/secret.example.yaml. После смены паролей: kubectl rollout restart deployment -n pad.
+      disableNameSuffixHash: true

@@ -120,7 +120,14 @@ class EventBus:
         self.subscriptions.append(Subscription(event_type, handler))
 
     def is_connected(self) -> bool:
-        return self.connection is not None and not self.connection.is_closed
+        """Есть ли сейчас живое соединение с RabbitMQ.
+
+        connect_robust при обрыве сам переподключается, и is_closed у него остаётся False, пока
+        не вызван close(). Поэтому дополнительно смотрим transport: во время переподключения
+        он None (проверено в лабе 3: брокер остановлен, а сервис продолжал считать себя подключённым).
+        """
+        c = self.connection
+        return c is not None and not c.is_closed and getattr(c, "transport", None) is not None
 
     async def start(self) -> None:
         if not self.enabled:

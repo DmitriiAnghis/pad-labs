@@ -1,0 +1,76 @@
+# rag-assistant: RAG из лабы 1 как сервис (API lab1/src/api/app.py): /ask, /search, /health, /ready.
+# Индекс читает с тома rag-data, который построил Job rag-indexer.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-assistant
+  labels: { app.kubernetes.io/name: rag-assistant, app.kubernetes.io/part-of: pad-warehouse }
+spec:
+  # 1 копия: каждая копия держит в памяти индекс и модели (около 1 ГБ), а LLM на HOME-PC одна,
+  # поэтому вторая копия не ускорит ответы.
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels: { app.kubernetes.io/name: rag-assistant }
+  # Recreate: том ReadWriteOnce и большой расход памяти; две копии одновременно при обновлении не нужны.
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: rag-assistant, app.kubernetes.io/part-of: pad-warehouse }
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      # initContainer выполняется до основного контейнера и должен завершиться успешно.
+      # Здесь он ждёт метку готового индекса: без индекса ассистент не может загрузиться.
+      initContainers:
+        - name: wait-for-index
+          image: pad/rag:1.0.0
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "until [ -f /data/.index-ready ]; do echo 'waiting for rag-indexer (/data/.index-ready)'; sleep 10; done; echo \"index ready: $(cat /data/.index-ready)\""]
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 100m, memory: 64Mi }
+          volumeMounts:
+            - { name: data, mountPath: /data, readOnly: true }
+      containers:
+        - name: rag-assistant
+          image: pad/rag:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 8000 }
+          envFrom:
+            - configMapRef: { name: rag-config }
+          env:
+            - { name: SERVICE_NAME, value: rag-assistant }
+          # Загрузка индекса и моделей занимает десятки секунд: startupProbe даёт до 5 минут.
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # /ready: индекс загружен (Ollama не обязательна, READY_REQUIRES_LLM=false).
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 250m, memory: 768Mi }
+            limits: { cpu: "2", memory: 2Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: rag-data }

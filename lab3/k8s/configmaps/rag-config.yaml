@@ -1,0 +1,18 @@
+# ConfigMap rag-config: настройки RAG-ассистента из лабы 1 (rag-indexer и rag-assistant).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rag-config
+  labels:
+    app.kubernetes.io/part-of: pad-warehouse
+data:
+  DATA_DIR: "/data"             # общий том rag-data: документация Odoo, индекс, модель MiniLM
+  LOG_FORMAT: "json"
+  # Ollama (сервер LLM) на HOME-PC. Из Pod-а в Minikube компьютер, на котором запущен Minikube,
+  # виден под именем host.minikube.internal. На этом компьютере должен быть открыт SSH-туннель,
+  # слушающий не только 127.0.0.1 (см. lab3/README.md, раздел «Ollama»).
+  OLLAMA_URL: "http://host.minikube.internal:11434"
+  LLM_MODEL: "qwen3.5:9b"
+  # false: без Ollama rag-assistant всё равно ready (поиск /search работает), /ask отвечает 503.
+  # Иначе Kubernetes убрал бы ассистента из Service только потому, что выключен другой компьютер.
+  READY_REQUIRES_LLM: "false"

@@ -1,0 +1,20 @@
+# Service gateway: постоянное имя и адрес для всех копий (Pod-ов) gateway.
+# Pod-ы пересоздаются и меняют IP; Service находит их по метке app.kubernetes.io/name и делит
+# запросы между теми, кто прошёл readinessProbe. Другие сервисы обращаются по
+# http://gateway:8000 (это имя из ConfigMap pad-config), а не по localhost.
+# Тип NodePort: кроме внутреннего адреса, открыт порт 30080 на узле Minikube, поэтому
+# gateway можно открыть снаружи (minikube service gateway -n pad --url). Остальные сервисы
+# ClusterIP: доступны только внутри кластера, снаружи их не видно.
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  labels: { app.kubernetes.io/name: gateway, app.kubernetes.io/part-of: pad-warehouse }
+spec:
+  type: NodePort
+  selector: { app.kubernetes.io/name: gateway }
+  ports:
+    - name: http
+      port: 8000          # порт Service (по нему обращаются другие)
+      targetPort: http    # порт контейнера (containerPort с именем http)
+      nodePort: 30080
