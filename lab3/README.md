@@ -130,11 +130,12 @@ cd ..
 ```powershell
 powershell -ExecutionPolicy Bypass -File lab3\scripts\build-images.ps1
 ```
-Скрипт переключает `docker` на Docker внутри Minikube и собирает 8 образов `pad/*:1.0.0`
-(6 сервисов, gateway, web-ui) через `lab2/docker-compose.yml`. В конце печатает список образов.
-С ключом `-WithRag` собирается ещё образ RAG.
-Если сборка внутри Minikube не идёт: `... build-images.ps1 -Mode load` (собрать в Docker Desktop
-и скопировать в Minikube, дольше).
+Скрипт собирает 8 образов `pad/*:1.0.0` (6 сервисов, gateway, web-ui) в Docker Desktop через
+`lab2/docker-compose.yml` и копирует их в Minikube (`minikube image load`). В конце печатает
+список образов: 8 строк `pad/...`. С ключом `-WithRag` собирается ещё образ RAG.
+Minikube 1.39 по умолчанию работает на containerd, поэтому быстрый режим `-Mode docker-env`
+(сборка сразу внутри Minikube) подходит, только если Minikube запущен с
+`--container-runtime=docker`.
 
 ### Шаг 2. Развернуть
 ```powershell
@@ -308,7 +309,8 @@ kubectl -n pad describe secret pad-secrets      # ключи без значен
 |---|---|---|
 | unit- и API-тесты сервисов | `cd lab2; python scripts\run_tests.py` | 50 passed |
 | e2e в docker compose | `docker compose up`, `pytest tests/e2e` | 5 passed |
-| e2e в Kubernetes | port-forward/NodePort, `pytest tests/e2e` | 5 passed |
+| e2e в Kubernetes | port-forward/NodePort, `pytest tests/e2e` | 5 passed (k3s 7.11; Minikube 1.39 на ПК 12.11) |
+| web-ui в Minikube на ПК (12.11) | port-forward `svc/web-ui 8090:8000`, весь путь заказа через страницы | товар → ячейка → приёмка → заказ → сборка → отгрузка; ошибки «не хватает товара» и «не та ячейка» показаны |
 | манифесты | `kubectl apply -k` в тестовом кластере k3s v1.31 | 28 объектов, все Pod-ы Ready ~30 с |
 | устойчивость | масштабирование, удаление Pod-ов, остановка RabbitMQ и PostgreSQL, обновление под нагрузкой | см. раздел 10 |
 

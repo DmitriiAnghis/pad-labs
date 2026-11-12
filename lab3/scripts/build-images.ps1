@@ -3,17 +3,18 @@
 
 Берёт: Dockerfile-ы из lab2 (gateway, web-ui, 6 сервисов, по желанию rag) и docker-compose.yml лабы 2, где у каждого
        образа есть имя и тег (pad/order-service:1.0.0 и т.д.).
-Делает: по умолчанию (-Mode docker-env) переключает команду docker этого окна PowerShell на Docker
+Делает: -Mode docker-env переключает команду docker этого окна PowerShell на Docker
         внутри Minikube и собирает образы там: Kubernetes находит их сразу, без реестра.
-        -Mode load: собирает образы в обычном Docker Desktop, затем копирует в Minikube
-        (minikube image load). Медленнее, но работает, если docker-env по какой-то причине не подходит.
+        -Mode load (по умолчанию): собирает образы в обычном Docker Desktop, затем копирует в Minikube
+        (minikube image load). Minikube 1.39 по умолчанию запускает контейнеры через containerd,
+        а не Docker, поэтому docker-env работает только при minikube start --container-runtime=docker.
 Получается: образы pad/*:1.0.0 в Minikube (проверка: minikube image ls | findstr pad/).
 Запуск из корня репозитория:
     powershell -ExecutionPolicy Bypass -File lab3\scripts\build-images.ps1
     powershell -ExecutionPolicy Bypass -File lab3\scripts\build-images.ps1 -Mode load
 #>
 param(
-    [ValidateSet("docker-env", "load")] [string]$Mode = "docker-env",
+    [ValidateSet("docker-env", "load")] [string]$Mode = "load",
     [string]$Tag = "1.0.0",
     [switch]$WithRag      # RAG не нужен для склада и интерфейса; его образ большой и собирается долго
 )

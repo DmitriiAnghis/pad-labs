@@ -373,7 +373,23 @@ deployment/order-service -n pad` (хранится 3 прошлые версии
 | лимит запросов при 1 и 2 копиях gateway | 314 и 629 из 1000 (раздел 8) |
 | RAG: initContainer, том, поиск через gateway | работает, `all_ready: true` |
 
-**Не проверено в облаке — проверить на ПК по README:**
+**Проверка на ПК (12 ноября 2026).** Windows 11, Docker Desktop, Minikube 1.39 (Kubernetes 1.37,
+containerd), `minikube start --driver=docker --cpus=4 --memory=6g`, без набора `rag/`:
+
+| Проверка | Результат |
+|---|---|
+| `build-images.ps1` (режим load) + `deploy.ps1` | 8 образов, 14 Pod-ов 1/1 Running (с 2 копиями web-ui) |
+| e2e-тест лабы 2 через gateway в Minikube | 5 passed |
+| web-ui: весь путь заказа через страницы | работает, ошибки API показаны текстом |
+| удаление Pod-а web-ui | новый Pod Running через 6 с |
+| Ingress (`minikube addons enable ingress`) | `Host: pad.local` → gateway 200, `Host: ui.pad.local` → web-ui 200 |
+| HPA order-service (`metrics-server`) | `cpu: 15%/70%`, 2 копии; `kubectl top pods`: сервисы 45–78 МБ, RabbitMQ 133 МБ |
+
+Найдено на ПК: Minikube 1.39 по умолчанию использует containerd, и `minikube docker-env` не
+работает, поэтому режим сборки по умолчанию в `build-images.ps1` теперь `load`.
+
+**Не проверено в облаке — проверить на ПК по README** (пункт 3 закрыт проверкой выше; RAG
+на ПК не запускался, потому что для него нужна Ollama на HOME-PC):
 1. Job `rag-indexer` внутри кластера (скачивание документации с GitHub и модели MiniLM).
 2. Сборка образа `pad/rag` из настоящего Dockerfile (в облаке заблокирован `apt-get`; для теста
    использовалась копия Dockerfile на базе `python:3.12` с уже установленным git).
