@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Ячейки и остатки{% endblock %}
+{% block content %}
+<h1>Ячейки и остатки</h1>
+{% macro product_select() %}
+<select name="product_id" required>
+  {% for p in products %}<option value="{{ p.id }}">{{ p.sku }} · {{ p.name }}</option>{% endfor %}
+</select>
+{% endmacro %}
+{% macro location_select(name) %}
+<select name="{{ name }}" required>
+  {% for l in locations %}<option>{{ l.code }}</option>{% endfor %}
+</select>
+{% endmacro %}
+<div class="grid">
+  {% if is_manager %}
+  <div class="card">
+    <h2>Приёмка товара в ячейку</h2>
+    <form class="stack" method="post" action="/stock/receipts">
+      <label>Товар {{ product_select() }}</label>
+      <label>Ячейка {{ location_select('location_code') }}</label>
+      <label>Количество <input name="quantity" type="number" min="1" value="10" required></label>
+      <button>Принять</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Новая ячейка</h2>
+    <form class="stack" method="post" action="/locations">
+      <label>Код ячейки (зона-ряд-стеллаж-полка) <input name="code" required placeholder="A-01-02-03"></label>
+      <label>Зона <input name="zone" placeholder="A"></label>
+      <button>Создать</button>
+    </form>
+  </div>
+  {% endif %}
+  {% if is_manager or is_picker %}
+  <div class="card">
+    <h2>Перемещение между ячейками</h2>
+    <form class="stack" method="post" action="/stock/moves">
+      <label>Товар {{ product_select() }}</label>
+      <label>Откуда {{ location_select('from_code') }}</label>
+      <label>Куда {{ location_select('to_code') }}</label>
+      <label>Количество <input name="quantity" type="number" min="1" value="1" required></label>
+      <button>Переместить</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+<div class="card">
+  <h2>Остатки по ячейкам</h2>
+  <table>
+    <tr><th>Товар</th><th>Ячейка</th><th class="num">Всего</th><th class="num">В резерве</th><th class="num">Свободно</th></tr>
+    {% for r in rows %}
+    <tr><td>{{ r.product }}</td><td>{{ r.location_code }}</td><td class="num">{{ r.quantity }}</td>
+        <td class="num">{{ r.reserved }}</td><td class="num"><b>{{ r.available }}</b></td></tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">Остатков нет. Создайте ячейку и примите товар.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+<div class="card">
+  <h2>Ячейки</h2>
+  <p>{% for l in locations %}<span class="chip">{{ l.code }}</span> {% else %}<span class="muted">Ячеек нет.</span>{% endfor %}</p>
+</div>
+{% endblock %}

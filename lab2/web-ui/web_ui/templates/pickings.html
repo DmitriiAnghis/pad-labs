@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Сборка{% endblock %}
+{% block content %}
+<h1>Задания на сборку</h1>
+<div class="card">
+  <p class="muted">Задание создаёт fulfillment-service сам, когда получает событие order.confirmed от order-service.</p>
+  <div class="filters">
+    Статус:
+    <a href="/pickings">все</a>
+    {% for s in ['ready', 'in_progress', 'done'] %}<a href="/pickings?status={{ s }}">{{ s|status }}</a>{% endfor %}
+  </div>
+  <table>
+    <tr><th>№</th><th>Заказ</th><th>Клиент</th><th>Статус</th><th>Сборщик</th><th class="num">Строк</th><th>Создано</th></tr>
+    {% for p in pickings %}
+    <tr><td><a href="/pickings/{{ p.id }}">#{{ p.id }}</a></td><td>{{ p.order_number }}</td><td>{{ p.customer_name }}</td>
+        <td><span class="chip {{ p.status }}">{{ p.status|status }}</span></td><td>{{ p.assigned_to or '' }}</td>
+        <td class="num">{{ p.lines|length }}</td><td>{{ p.created_at|dt }}</td></tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">Заданий нет.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

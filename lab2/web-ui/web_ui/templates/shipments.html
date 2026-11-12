@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Отгрузки{% endblock %}
+{% block content %}
+<h1>Отгрузки</h1>
+<div class="card">
+  <p class="muted">Отгрузка появляется после завершения сборки. Отправка публикует событие shipment.dispatched, и заказ становится «отгружен».</p>
+  <table>
+    <tr><th>№</th><th>Заказ</th><th>Статус</th><th>Перевозчик</th><th>Трек</th><th>Создана</th><th></th></tr>
+    {% for s in shipments %}
+    <tr><td>#{{ s.id }}</td><td>{{ s.order_number }}</td><td><span class="chip {{ s.status }}">{{ s.status|status }}</span></td>
+        <td>{{ s.carrier or '' }}</td><td>{{ s.tracking_number or '' }}</td><td>{{ s.created_at|dt }}</td>
+        <td>{% if is_manager and s.status == 'ready' %}
+          <form class="inline" method="post" action="/shipments/{{ s.id }}/dispatch">
+            <input name="carrier" required placeholder="Перевозчик" size="10">
+            <input name="tracking_number" required placeholder="Трек-номер" size="12">
+            <button>Отправить</button>
+          </form>{% endif %}</td></tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">Отгрузок нет.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

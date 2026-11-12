@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Ошибка{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Не удалось открыть страницу</h1>
+  <div class="msg err">{{ message }}</div>
+  <p><a href="/">На главную</a> · <a href="javascript:history.back()">Назад</a></p>
+</div>
+{% endblock %}

@@ -1,0 +1,35 @@
+{# View: общий каркас всех страниц (шапка, меню, сообщения ok/err). Данные сюда приходят из контроллера. #}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Склад{% endblock %} · PAD</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+{% if user %}
+<header><div class="bar">
+  <a class="brand" href="/">Склад PAD</a>
+  <nav>
+    {% set here = request.url.path %}
+    <a href="/" class="{{ 'on' if here == '/' }}">Главная</a>
+    <a href="/products" class="{{ 'on' if here.startswith('/products') }}">Товары</a>
+    <a href="/stock" class="{{ 'on' if here.startswith('/stock') }}">Ячейки и остатки</a>
+    <a href="/orders" class="{{ 'on' if here.startswith('/orders') }}">Заказы</a>
+    <a href="/pickings" class="{{ 'on' if here.startswith('/pickings') }}">Сборка</a>
+    <a href="/shipments" class="{{ 'on' if here.startswith('/shipments') }}">Отгрузки</a>
+    <a href="/notifications" class="{{ 'on' if here.startswith('/notifications') }}">Уведомления</a>
+  </nav>
+  <div class="who">{{ user.username }} · {{ user.roles|join(', ') }}
+    <form class="inline" method="post" action="/logout"><button class="ghost">Выйти</button></form>
+  </div>
+</div></header>
+{% endif %}
+<main>
+  {% if request.query_params.get('ok') %}<div class="msg ok">{{ request.query_params.get('ok') }}</div>{% endif %}
+  {% if request.query_params.get('err') %}<div class="msg err">{{ request.query_params.get('err') }}</div>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

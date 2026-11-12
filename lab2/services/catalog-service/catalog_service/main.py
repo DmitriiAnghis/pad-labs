@@ -6,6 +6,9 @@ GET    /products/{id}            карточка товара
 GET    /products/by-barcode/{c}  найти по штрихкоду (сканер сборщика)
 PATCH  /products/{id}            изменить (admin, manager)
 DELETE /products/{id}            снять с учёта: active=false, строка остаётся для истории (admin, manager)
+
+Слои: обработчики ниже (Controller) -> ProductRepository (repository.py, запросы к базе) -> Product (models.py).
+Репозиторий обработчик получает через DI: repo: ProductRepository = Depends(product_repo).
 """
 from __future__ import annotations
 
@@ -13,16 +16,15 @@ import logging
 
 from fastapi import Depends, FastAPI, Query
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from pad_common.app import create_service, get_session
 from pad_common.auth import Principal, require_roles
 from pad_common.config import BaseServiceSettings
-from pad_common.errors import Conflict, NotFound
 from pad_common.logging import log_event
 
 from .models import Product
+from .repository import ProductRepository
 
 log = logging.getLogger("catalog")
 
@@ -58,28 +60,9 @@ class ProductOut(BaseModel):
     active: bool
 
 
-def _get(s: Session, product_id: int) -> Product:
-    p = s.get(Product, product_id)
-    if p is None:
-        raise NotFound(f"product {product_id} not found")
-    return p
-
-
-def _check_unique(s: Session, sku: str | None, barcode: str | None, exclude_id: int | None = None) -> None:
-    conds = []
-    if sku:
-        conds.append(Product.sku == sku)
-    if barcode:
-        conds.append(Product.barcode == barcode)
-    if not conds:
-        return
-    q = select(Product).where(or_(*conds))
-    if exclude_id is not None:
-        q = q.where(Product.id != exclude_id)
-    other = s.scalar(q)
-    if other is not None:
-        field = "sku" if sku and other.sku == sku else "barcode"
-        raise Conflict(f"product with this {field} already exists (id {other.id})", code=f"duplicate_{field}")
+def product_repo(s: Session = Depends(get_session)) -> ProductRepository:
+    """DI: FastAPI создаёт репозиторий на каждый запрос из сессии этого запроса."""
+    return ProductRepository(s)
 
 
 def build_app(settings: Settings | None = None) -> FastAPI:
@@ -91,49 +74,38 @@ def build_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/products", response_model=list[ProductOut], tags=["products"])
     def list_products(q: str | None = Query(None, max_length=100), include_inactive: bool = False,
                       limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0),
-                      _: Principal = Depends(readers), s: Session = Depends(get_session)):
-        stmt = select(Product).order_by(Product.sku)
-        if not include_inactive:
-            stmt = stmt.where(Product.active.is_(True))
-        if q:
-            like = f"%{q}%"
-            stmt = stmt.where(or_(Product.sku.ilike(like), Product.name.ilike(like)))
-        return list(s.scalars(stmt.limit(limit).offset(offset)))
+                      _: Principal = Depends(readers), repo: ProductRepository = Depends(product_repo)):
+        return repo.search(q, include_inactive, limit, offset)
 
     @app.post("/products", response_model=ProductOut, status_code=201, tags=["products"])
-    def create_product(body: ProductIn, p: Principal = Depends(writers), s: Session = Depends(get_session)):
-        _check_unique(s, body.sku, body.barcode)
-        prod = Product(**body.model_dump())
-        s.add(prod)
-        s.flush()
+    def create_product(body: ProductIn, p: Principal = Depends(writers), repo: ProductRepository = Depends(product_repo)):
+        repo.ensure_unique(body.sku, body.barcode)
+        prod = repo.add(Product(**body.model_dump()))
         log_event(log, "product created", product_id=prod.id, sku=prod.sku, by=p.username)
         return prod
 
     @app.get("/products/by-barcode/{barcode}", response_model=ProductOut, tags=["products"])
-    def by_barcode(barcode: str, _: Principal = Depends(readers), s: Session = Depends(get_session)):
-        prod = s.scalar(select(Product).where(Product.barcode == barcode))
-        if prod is None:
-            raise NotFound(f"no product with barcode {barcode}")
-        return prod
+    def by_barcode(barcode: str, _: Principal = Depends(readers), repo: ProductRepository = Depends(product_repo)):
+        return repo.by_barcode(barcode)
 
     @app.get("/products/{product_id}", response_model=ProductOut, tags=["products"])
-    def get_product(product_id: int, _: Principal = Depends(readers), s: Session = Depends(get_session)):
-        return _get(s, product_id)
+    def get_product(product_id: int, _: Principal = Depends(readers), repo: ProductRepository = Depends(product_repo)):
+        return repo.get(product_id)
 
     @app.patch("/products/{product_id}", response_model=ProductOut, tags=["products"])
     def update_product(product_id: int, body: ProductPatch, p: Principal = Depends(writers),
-                       s: Session = Depends(get_session)):
-        prod = _get(s, product_id)
+                       repo: ProductRepository = Depends(product_repo)):
+        prod = repo.get(product_id)
         data = body.model_dump(exclude_unset=True)
-        _check_unique(s, None, data.get("barcode"), exclude_id=prod.id)
+        repo.ensure_unique(None, data.get("barcode"), exclude_id=prod.id)
         for k, v in data.items():
             setattr(prod, k, v)
         log_event(log, "product updated", product_id=prod.id, fields=list(data), by=p.username)
         return prod
 
     @app.delete("/products/{product_id}", response_model=ProductOut, tags=["products"])
-    def deactivate(product_id: int, p: Principal = Depends(writers), s: Session = Depends(get_session)):
-        prod = _get(s, product_id)
+    def deactivate(product_id: int, p: Principal = Depends(writers), repo: ProductRepository = Depends(product_repo)):
+        prod = repo.get(product_id)
         prod.active = False
         log_event(log, "product deactivated", product_id=prod.id, by=p.username)
         return prod

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Вход{% endblock %}
+{% block content %}
+<div class="card login">
+  <h1>Вход в систему склада</h1>
+  <form class="stack" method="post" action="/login">
+    <label>Логин <input name="username" required autofocus autocomplete="username"></label>
+    <label>Пароль <input name="password" type="password" required autocomplete="current-password"></label>
+    <button>Войти</button>
+  </form>
+  <p class="muted">Первый пользователь: admin, пароль в файле lab2/.env (ADMIN_PASSWORD).</p>
+</div>
+{% endblock %}

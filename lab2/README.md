@@ -17,7 +17,8 @@ REST API со Swagger, своя база PostgreSQL, свои настройки
 
 ```mermaid
 flowchart TB
-  client["Клиент: Swagger, curl, тесты"] --> gw["API Gateway :8080<br/>JWT, request_id, rate limit"]
+  ui["web-ui :8090<br/>страницы, MVC"] --> gw
+  client["Swagger, curl, тесты"] --> gw["API Gateway :8080<br/>JWT, request_id, rate limit"]
   gw --> auth["auth-service"]
   gw --> catalog["catalog-service"]
   gw --> inv["inventory-service"]
@@ -58,6 +59,7 @@ flowchart TB
 | **rag-assistant** | вопрос пользователя | RAG лабы 1: разбор вопроса, гибридный поиск, reranker, ответ LLM со ссылками или отказ | ответ с источниками | подсказка «как сделать X в Odoo» |
 | rag-indexer | репозиторий odoo/documentation | `grab → process → index` из лабы 1 | индекс в томе `rag-data` | индексация редкая и долгая, поэтому отдельная задача |
 | gateway (не бизнес-сервис) | все запросы `/api/...` | проверка JWT, `X-Request-ID`, ограничение частоты, пересылка нужному сервису с таймаутом | одна точка входа | наружу открыт только он |
+| **web-ui** (не бизнес-сервис) | действия пользователя в браузере | страницы по схеме MVC, запросы только через gateway, токен в cookie httpOnly | интерфейс для admin, manager, picker | работа с системой без Swagger; паттерны MVC, Repository, Services, DI (см. DECISIONS.md, раздел 12) |
 
 Общий служебный код (логи, ошибки, health/ready, JWT, события) лежит в пакете
 [`libs/pad_common`](libs/pad_common). Бизнес-логики в нём нет.
@@ -110,7 +112,8 @@ docker compose ps                  # все сервисы должны быть
 curl http://localhost:8080/api/status
 ```
 
-* Gateway: http://localhost:8080
+* **Веб-интерфейс: http://localhost:8090** (вход: `admin` и пароль из `.env`)
+* Gateway: http://localhost:8080 (порт меняется переменной `GATEWAY_PORT` в `.env`, если 8080 занят)
 * Swagger каждого сервиса: http://localhost:8001/docs (auth) … 8006 (notification), 8007 (RAG)
 * Панель RabbitMQ: http://localhost:15672 (логин и пароль из `.env`)
 

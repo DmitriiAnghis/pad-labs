@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Товары{% endblock %}
+{% block content %}
+<h1>Товары</h1>
+{% if is_manager %}
+<div class="card">
+  <h2>Новый товар</h2>
+  <form class="row" method="post" action="/products">
+    <label>SKU (артикул) <input name="sku" required placeholder="SKU-0001"></label>
+    <label>Название <input name="name" required placeholder="Коробка 40x30x20"></label>
+    <label>Штрихкод <input name="barcode" placeholder="4601234567890"></label>
+    <label>Ед. изм. <input name="uom" value="pcs"></label>
+    <button>Создать</button>
+  </form>
+</div>
+{% endif %}
+<div class="card">
+  <form class="filters" method="get" action="/products">
+    <input name="q" value="{{ q }}" placeholder="Поиск по SKU или названию">
+    <button class="ghost">Найти</button>
+  </form>
+  <table>
+    <tr><th>id</th><th>SKU</th><th>Название</th><th>Штрихкод</th><th>Ед.</th></tr>
+    {% for p in products %}
+    <tr><td>{{ p.id }}</td><td>{{ p.sku }}</td><td>{{ p.name }}</td><td>{{ p.barcode or '' }}</td><td>{{ p.uom }}</td></tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">Товаров нет.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

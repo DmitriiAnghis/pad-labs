@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Заказ {{ order.number }}{% endblock %}
+{% block content %}
+<h1>Заказ {{ order.number }} <span class="chip {{ order.status }}">{{ order.status|status }}</span></h1>
+<div class="grid">
+  <div class="card">
+    <h2>Данные заказа</h2>
+    <p>Клиент: <b>{{ order.customer_name }}</b><br>Адрес: {{ order.shipping_address }}<br>
+       Создал: {{ order.created_by }}, {{ order.created_at|dt }}<br>
+       {% if order.tracking_number %}Трек-номер: {{ order.tracking_number }}{% endif %}</p>
+    {% if is_manager and order.status == 'confirmed' %}
+    <form class="inline" method="post" action="/orders/{{ order.id }}/cancel">
+      <input name="reason" placeholder="Причина отмены">
+      <button class="ghost">Отменить заказ</button>
+    </form>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h2>История статусов</h2>
+    <table>
+      {% for h in order.history %}
+      <tr><td>{{ h.at|dt }}</td><td><span class="chip {{ h.status }}">{{ h.status|status }}</span></td><td class="muted">{{ h.note }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+<div class="card">
+  <h2>Строки и резерв по ячейкам</h2>
+  <table>
+    <tr><th>Товар</th><th class="num">Количество</th><th>Зарезервировано в ячейках</th></tr>
+    {% for l in order.lines %}
+    <tr><td>{{ names.get(l.product_id, '#' ~ l.product_id) }}</td><td class="num">{{ l.quantity }}</td>
+        <td>{% for a in l.allocations %}<span class="chip">{{ a.location_code }}: {{ a.quantity }}</span> {% endfor %}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+<p><a href="/orders">← Все заказы</a></p>
+{% endblock %}

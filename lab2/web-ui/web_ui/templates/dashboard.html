@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Главная{% endblock %}
+{% block content %}
+<h1>Главная</h1>
+{% macro stat(value, label, href) %}
+<a class="stat" href="{{ href }}"><b>{{ value if value is not none else '—' }}</b><span>{{ label }}</span></a>
+{% endmacro %}
+<div class="stats">
+  {{ stat(summary.orders_confirmed, 'заказов ждут сборки', '/orders?status=confirmed') }}
+  {{ stat(summary.pickings_ready, 'заданий на сборку свободно', '/pickings?status=ready') }}
+  {{ stat(summary.pickings_in_progress, 'заданий в работе', '/pickings?status=in_progress') }}
+  {{ stat(summary.orders_picked, 'заказов собрано, ждут отгрузки', '/shipments') }}
+  {{ stat(summary.unread, 'непрочитанных уведомлений', '/notifications') }}
+</div>
+<div class="card">
+  <h2>Как проходит заказ</h2>
+  <ol>
+    <li><a href="/products">Товары</a>: менеджер заводит товар в справочник.</li>
+    <li><a href="/stock">Ячейки и остатки</a>: создаёт ячейку и принимает товар в неё.</li>
+    <li><a href="/orders">Заказы</a>: создаёт заказ, товар сразу резервируется.</li>
+    <li><a href="/pickings">Сборка</a>: задание появляется само (событие order.confirmed), сборщик берёт его и отмечает ячейки.</li>
+    <li><a href="/shipments">Отгрузки</a>: после сборки менеджер отправляет отгрузку, заказ становится «отгружен».</li>
+  </ol>
+  <p class="muted">Число «—» значит, что сервис сейчас недоступен. Остальная страница при этом работает.</p>
+</div>
+{% endblock %}

@@ -6,6 +6,10 @@ GET  /orders              список (фильтр по статусу)
 GET  /orders/{id}         заказ со строками, ячейками резерва и историей статусов
 POST /orders/{id}/cancel  отменить (только confirmed) -> событие order.cancelled
 Слушает picking.completed -> picked, shipment.dispatched -> shipped.
+
+Слои: обработчики ниже (Controller) -> OrderRepository (repository.py, запросы к базе)
+  -> Order (models.py); правила статусов в domain.py (Services/доменная логика).
+Репозиторий обработчик получает через DI: repo: OrderRepository = Depends(order_repo).
 """
 from __future__ import annotations
 
@@ -15,20 +19,20 @@ from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from pad_common import contracts as c
 from pad_common.app import create_service, get_session
 from pad_common.auth import Principal, require_roles
 from pad_common.config import BaseServiceSettings
-from pad_common.errors import AppError, Conflict, NotFound, UpstreamError
+from pad_common.errors import AppError, Conflict, UpstreamError
 from pad_common.events import add_outbox
 from pad_common.http import ServiceClient
 from pad_common.logging import log_event
 
 from . import domain
 from .models import Order, OrderLine, StatusChange
+from .repository import OrderRepository
 
 log = logging.getLogger("orders")
 SERVICE = "order-service"
@@ -73,6 +77,11 @@ def set_status(o: Order, new: str, note: str = "") -> bool:
     return True
 
 
+def order_repo(s: Session = Depends(get_session)) -> OrderRepository:
+    """DI: FastAPI создаёт репозиторий на каждый запрос из сессии этого запроса."""
+    return OrderRepository(s)
+
+
 def build_app(settings: Settings | None = None, inventory_transport=None) -> FastAPI:
     settings = settings or Settings()
     app = create_service(settings, title="order-service",
@@ -109,7 +118,7 @@ def build_app(settings: Settings | None = None, inventory_transport=None) -> Fas
                 merged[l.product_id] = merged.get(l.product_id, 0) + l.quantity
             order.lines = [OrderLine(product_id=pid, quantity=q, allocations=alloc.get(pid, [])) for pid, q in merged.items()]
             order.history = [StatusChange(order_id=order_id, status=domain.CONFIRMED, note="stock reserved")]
-            s.add(order)
+            OrderRepository(s).add(order)
             add_outbox(s, SERVICE, c.ORDER_CONFIRMED, c.OrderConfirmed(
                 order_id=order_id, order_number=number, customer_name=body.customer_name,
                 lines=[c.ConfirmedLine(product_id=l.product_id, quantity=l.quantity,
@@ -124,24 +133,16 @@ def build_app(settings: Settings | None = None, inventory_transport=None) -> Fas
 
     @app.get("/orders", tags=["orders"])
     def list_orders(status: str | None = None, limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0),
-                    _: Principal = Depends(anyone), s: Session = Depends(get_session)):
-        q = select(Order).order_by(Order.created_at.desc())
-        if status:
-            q = q.where(Order.status == status)
-        return [order_view(o, full=False) for o in s.scalars(q.limit(limit).offset(offset))]
+                    _: Principal = Depends(anyone), repo: OrderRepository = Depends(order_repo)):
+        return [order_view(o, full=False) for o in repo.list(status, limit, offset)]
 
     @app.get("/orders/{order_id}", tags=["orders"])
-    def get_order(order_id: str, _: Principal = Depends(anyone), s: Session = Depends(get_session)):
-        o = s.get(Order, order_id)
-        if o is None:
-            raise NotFound(f"order {order_id} not found")
-        return order_view(o)
+    def get_order(order_id: str, _: Principal = Depends(anyone), repo: OrderRepository = Depends(order_repo)):
+        return order_view(repo.get(order_id))
 
     @app.post("/orders/{order_id}/cancel", tags=["orders"], summary="Отменить подтверждённый заказ")
     def cancel(order_id: str, body: CancelIn, p: Principal = Depends(managers), s: Session = Depends(get_session)):
-        o = s.get(Order, order_id)
-        if o is None:
-            raise NotFound(f"order {order_id} not found")
+        o = OrderRepository(s).get(order_id)
         if not set_status(o, domain.CANCELLED, body.reason):
             raise Conflict(f"order in status '{o.status}' cannot be cancelled", code="invalid_status")
         add_outbox(s, SERVICE, c.ORDER_CANCELLED,
@@ -151,13 +152,13 @@ def build_app(settings: Settings | None = None, inventory_transport=None) -> Fas
 
     def on_picking_completed(s: Session, env) -> None:
         ev = c.PickingCompleted.model_validate(env.payload)
-        o = s.get(Order, ev.order_id)
+        o = OrderRepository(s).find(ev.order_id)
         if o is not None and set_status(o, domain.PICKED, f"picked by {ev.picked_by}" + (" (short)" if ev.short else "")):
             o.short_picked = ev.short
 
     def on_shipment_dispatched(s: Session, env) -> None:
         ev = c.ShipmentDispatched.model_validate(env.payload)
-        o = s.get(Order, ev.order_id)
+        o = OrderRepository(s).find(ev.order_id)
         if o is not None and set_status(o, domain.SHIPPED, f"{ev.carrier} {ev.tracking_number}"):
             o.tracking_number = ev.tracking_number
 

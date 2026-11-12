@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Сборка #{{ p.id }}{% endblock %}
+{% block content %}
+<h1>Задание #{{ p.id }} · заказ {{ p.order_number }} <span class="chip {{ p.status }}">{{ p.status|status }}</span></h1>
+<div class="card">
+  <p>Клиент: {{ p.customer_name }}. Сборщик: {{ p.assigned_to or 'не назначен' }}.</p>
+  {% if is_picker and p.status == 'ready' %}
+  <form class="inline" method="post" action="/pickings/{{ p.id }}/start"><button>Взять в работу</button></form>
+  {% endif %}
+</div>
+<div class="card">
+  <h2>Маршрут по ячейкам</h2>
+  <p class="muted">Строки идут в порядке обхода ячеек. В поле «Ячейка» сборщик вводит код отсканированной ячейки:
+    если он не совпадает с нужным, сервис ответит «отсканирована не та ячейка».</p>
+  <table>
+    <tr><th>Шаг</th><th>Ячейка</th><th>Товар</th><th class="num">Нужно</th><th class="num">Собрано</th><th></th></tr>
+    {% for l in p.lines %}
+    <tr><td>{{ l.sequence }}</td><td><b>{{ l.location_code }}</b></td><td>{{ l.product }}</td>
+        <td class="num">{{ l.quantity }}</td><td class="num">{{ l.picked_quantity }}</td>
+        <td>{% if is_picker and p.status == 'in_progress' %}
+          <form class="inline" method="post" action="/pickings/{{ p.id }}/lines/{{ l.id }}/pick">
+            <input name="location_code" value="{{ l.location_code }}" size="12" aria-label="Ячейка">
+            <input name="quantity" type="number" min="0" value="{{ l.quantity }}" style="width:70px" aria-label="Количество">
+            <button class="ghost">Отметить</button>
+          </form>{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  {% if is_picker and p.status == 'in_progress' %}
+  <p><form class="inline" method="post" action="/pickings/{{ p.id }}/complete"><button>Завершить сборку</button></form>
+    <span class="muted">Собрано меньше нужного = недобор: остаток вернётся в свободный.</span></p>
+  {% endif %}
+</div>
+<p><a href="/pickings">← Все задания</a></p>
+{% endblock %}

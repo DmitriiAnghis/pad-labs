@@ -159,6 +159,19 @@ services:
       RATE_LIMIT_PER_MINUTE: "300"
     ports: ["${GATEWAY_PORT:-8080}:8000"]   # порт gateway на компьютере; меняется через GATEWAY_PORT в .env
 
+  # Веб-интерфейс (UI) по схеме MVC. Ходит в систему только через gateway, своей базы нет.
+  web-ui:
+    image: pad/web-ui
+    build: { context: ., dockerfile: web-ui/Dockerfile }
+    restart: unless-stopped
+    depends_on:
+      gateway: { condition: service_started }
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: json
+      GATEWAY_URL: http://gateway:8000
+    ports: ["${WEB_UI_PORT:-8090}:8000"]   # интерфейс в браузере: http://localhost:8090
+
 volumes:
   pgdata:
   rabbitdata:

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Уведомления{% endblock %}
+{% block content %}
+<h1>Уведомления</h1>
+<div class="card">
+  <p class="muted">notification-service получает события из RabbitMQ и пишет уведомления для ролей. Здесь видны уведомления для ваших ролей.</p>
+  <table>
+    <tr><th>Когда</th><th>Кому</th><th>Событие</th><th>Текст</th><th></th></tr>
+    {% for n in items %}
+    <tr class="{{ '' if n.read else 'unread' }}"><td>{{ n.created_at|dt }}</td><td>{{ n.audience }}</td>
+        <td><span class="chip">{{ n.type }}</span></td><td>{{ n.title }}<br><span class="muted">{{ n.message }}</span></td>
+        <td>{% if not n.read %}<form class="inline" method="post" action="/notifications/{{ n.id }}/read"><button class="ghost">Прочитано</button></form>{% endif %}</td></tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">Уведомлений нет.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

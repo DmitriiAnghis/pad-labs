@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DIRS = ["libs/pad_common", "gateway", *sorted(str(p.relative_to(ROOT)) for p in (ROOT / "services").glob("*-service"))]
+DIRS = ["libs/pad_common", "gateway", "web-ui", *sorted(str(p.relative_to(ROOT)) for p in (ROOT / "services").glob("*-service"))]
 
 
 def main() -> int:

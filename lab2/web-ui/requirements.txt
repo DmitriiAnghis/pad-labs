@@ -1,0 +1,3 @@
+# FastAPI, httpx, pydantic-settings приходят с пакетом pad_common (см. Dockerfile).
+jinja2>=3.1
+python-multipart>=0.0.9

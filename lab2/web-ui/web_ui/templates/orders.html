@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Заказы{% endblock %}
+{% block content %}
+<h1>Заказы</h1>
+{% if is_manager %}
+<div class="card">
+  <h2>Новый заказ</h2>
+  <p class="muted">При создании order-service сразу резервирует товар в inventory-service. Не хватает товара: заказ не создаётся.</p>
+  <form class="stack" method="post" action="/orders">
+    <div class="row">
+      <label>Клиент <input name="customer_name" required placeholder="ООО Ромашка"></label>
+      <label>Адрес доставки <input name="shipping_address" required placeholder="Кишинёв"></label>
+    </div>
+    {% for i in range(3) %}
+    <div class="row">
+      <label>Товар {{ i + 1 }}
+        <select name="product_id">
+          <option value="">—</option>
+          {% for p in products %}<option value="{{ p.id }}">{{ p.sku }} · {{ p.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Количество <input name="quantity" type="number" min="1" {% if i == 0 %}value="1"{% endif %}></label>
+    </div>
+    {% endfor %}
+    <div><button>Создать заказ</button></div>
+  </form>
+</div>
+{% endif %}
+<div class="card">
+  <div class="filters">
+    Статус:
+    <a href="/orders">все</a>
+    {% for s in ['confirmed', 'picked', 'shipped', 'cancelled'] %}<a href="/orders?status={{ s }}">{{ s|status }}</a>{% endfor %}
+  </div>
+  <table>
+    <tr><th>Номер</th><th>Клиент</th><th>Статус</th><th>Создан</th><th>Трек</th></tr>
+    {% for o in orders %}
+    <tr><td><a href="/orders/{{ o.id }}">{{ o.number }}</a></td><td>{{ o.customer_name }}</td>
+        <td><span class="chip {{ o.status }}">{{ o.status|status }}</span>{% if o.short_picked %} <span class="chip">недобор</span>{% endif %}</td>
+        <td>{{ o.created_at|dt }}</td><td>{{ o.tracking_number }}</td></tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">Заказов нет.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}
