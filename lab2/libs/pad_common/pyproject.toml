@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pad-common"
+version = "1.0.0"
+description = "Общий служебный код сервисов лабы 2: логи, ошибки, health/ready, JWT, база, события"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn>=0.27",
+  "pydantic>=2.5",
+  "pydantic-settings>=2.2",
+  "sqlalchemy>=2.0",
+  "psycopg[binary]>=3.1",
+  "httpx>=0.27",
+  "PyJWT[crypto]>=2.8",
+  "aio-pika>=9.4",
+]
+
+[tool.setuptools]
+packages = ["pad_common"]

@@ -1,0 +1,22 @@
+#!/bin/sh
+# Выполняется один раз, при первом запуске PostgreSQL с пустым томом.
+# Создаёт по базе и пользователю на каждый сервис. Пользователь сервиса владеет только своей
+# базой и не может подключиться к чужой (CONNECT отозван у PUBLIC). Пароли приходят из .env.
+set -e
+create() {
+  name="$1"; password="$2"
+  if [ -z "$password" ]; then echo "password for $name is empty" >&2; exit 1; fi
+  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres <<SQL
+CREATE USER ${name} WITH PASSWORD '${password}';
+CREATE DATABASE ${name}_db OWNER ${name};
+REVOKE CONNECT ON DATABASE ${name}_db FROM PUBLIC;
+GRANT CONNECT ON DATABASE ${name}_db TO ${name};
+SQL
+  echo "created database ${name}_db"
+}
+create auth "$AUTH_DB_PASSWORD"
+create catalog "$CATALOG_DB_PASSWORD"
+create inventory "$INVENTORY_DB_PASSWORD"
+create orders "$ORDER_DB_PASSWORD"
+create fulfillment "$FULFILLMENT_DB_PASSWORD"
+create notification "$NOTIFICATION_DB_PASSWORD"

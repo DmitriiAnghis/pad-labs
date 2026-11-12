@@ -26,3 +26,7 @@ lab1/data/runs/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Lab 2
+lab2/**/*.db
+lab2/.env

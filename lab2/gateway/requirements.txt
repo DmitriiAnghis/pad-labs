@@ -1,0 +1,1 @@
+# Всё нужное (FastAPI, httpx, PyJWT) приходит с пакетом pad_common.
