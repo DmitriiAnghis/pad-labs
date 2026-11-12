@@ -23,3 +23,13 @@ spec:
               service:
                 name: gateway
                 port: { name: http }
+    # Веб-интерфейс: http://ui.pad.local (в hosts тот же адрес Minikube, что и для pad.local)
+    - host: ui.pad.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web-ui
+                port: { name: http }

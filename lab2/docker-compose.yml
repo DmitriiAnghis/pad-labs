@@ -161,7 +161,7 @@ services:
 
   # Веб-интерфейс (UI) по схеме MVC. Ходит в систему только через gateway, своей базы нет.
   web-ui:
-    image: pad/web-ui
+    image: pad/web-ui:${IMAGE_TAG:-1.0.0}
     build: { context: ., dockerfile: web-ui/Dockerfile }
     restart: unless-stopped
     depends_on:

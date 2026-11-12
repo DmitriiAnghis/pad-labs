@@ -2,8 +2,8 @@
 
 ## 1. Описание проекта
 
-Лаба 3 берёт приложение лабы 2 (7 бизнес-сервисов + API Gateway + RAG-ассистент из лабы 1,
-PostgreSQL, RabbitMQ), упаковывает каждый сервис в Docker-образ и разворачивает всю систему в
+Лаба 3 берёт приложение лабы 2 (6 складских сервисов + API Gateway + веб-интерфейс web-ui,
+PostgreSQL, RabbitMQ; по желанию RAG-ассистент из лабы 1), упаковывает каждый сервис в Docker-образ и разворачивает всю систему в
 Kubernetes на Minikube.
 
 Что входит:
@@ -11,9 +11,10 @@ Kubernetes на Minikube.
   запуск не от root. Описание и замеры: [docker/README.md](docker/README.md).
 * **Docker Compose:** вся система одной командой `docker compose up --build` в `lab2/`
   (проверка перед Kubernetes).
-* **Kubernetes:** манифесты в [k8s/](k8s): Namespace, 8 Deployment, 10 Service, 3 ConfigMap,
-  Secret из файла вне Git, StatefulSet для PostgreSQL и RabbitMQ, Job для индексации RAG, PVC,
-  Ingress, HPA (дополнительно). У каждого сервиса startup/liveness/readiness-пробы и
+* **Kubernetes:** манифесты в [k8s/](k8s): Namespace, 8 Deployment (6 сервисов, gateway, web-ui),
+  10 Service, 2 ConfigMap, Secret из файла вне Git, StatefulSet для PostgreSQL и RabbitMQ,
+  Ingress, HPA (дополнительно). RAG-ассистент вынесен в необязательный набор [k8s/rag/](k8s/rag)
+  (Deployment, Service, ConfigMap, Job индексации, PVC): ему нужна Ollama на HOME-PC. У каждого сервиса startup/liveness/readiness-пробы и
   requests/limits.
 * **Скрипты:** сборка образов в Minikube, развёртывание, сценарий демонстрации ([scripts/](scripts)).
 * **Решения и эксперименты для защиты:** [DECISIONS.md](DECISIONS.md).
@@ -32,17 +33,20 @@ Kubernetes на Minikube.
 ```mermaid
 flowchart TB
   user["Браузер, curl, тесты"] -->|"port-forward :8080 / NodePort 30080 / Ingress pad.local"| gwsvc
+  user -->|"port-forward :8090 / NodePort 30090 / Ingress ui.pad.local"| uisvc
   subgraph ns["Namespace pad (Minikube)"]
+    uisvc["Service web-ui"] --> ui1["Pod web-ui"] & ui2["Pod web-ui"]
+    ui1 & ui2 -->|"REST через gateway"| gwsvc
     gwsvc["Service gateway"] --> gw1["Pod gateway"] & gw2["Pod gateway"]
     gw1 & gw2 --> auth["Service auth-service"] & cat["Service catalog-service"] & inv["Service inventory-service"]
-    gw1 & gw2 --> ord["Service order-service"] & ful["Service fulfillment-service"] & notif["Service notification-service"] & rag["Service rag-assistant"]
+    gw1 & gw2 --> ord["Service order-service"] & ful["Service fulfillment-service"] & notif["Service notification-service"] & rag["Service rag-assistant<br/>(набор rag/, по желанию)"]
     ord -->|REST| inv
     inv -->|REST| cat
     auth & cat & inv & ord & ful & notif --> pg[("StatefulSet postgres<br/>PVC 1Gi")]
     inv & ord & ful & notif <-->|события| mq[("StatefulSet rabbitmq<br/>PVC 1Gi")]
     job["Job rag-indexer"] --> vol[("PVC rag-data 3Gi")]
     rag --> vol
-    cm["ConfigMap pad-config, rag-config"] -.->|env| gw1
+    cm["ConfigMap pad-config"] -.->|env| gw1
     sec["Secret pad-secrets"] -.->|env| auth
   end
   rag -->|"OLLAMA_URL: host.minikube.internal:11434"| pc["этот компьютер: SSH-туннель"] --> home["HOME-PC: Ollama qwen3.5:9b"]
@@ -51,17 +55,17 @@ flowchart TB
 | Объект Kubernetes | Сколько | Зачем |
 |---|---|---|
 | Namespace `pad` | 1 | всё приложение отдельно от системных объектов; удаляется одной командой |
-| Deployment | 8 | auth, catalog, inventory, order, fulfillment, notification, gateway, rag-assistant: образ, число копий, переменные, пробы, ресурсы |
-| Service | 10 | постоянное имя для каждого сервиса + postgres + rabbitmq; gateway типа NodePort |
+| Deployment | 8 (+1 в rag/) | auth, catalog, inventory, order, fulfillment, notification, gateway, web-ui; rag-assistant в наборе `rag/`: образ, число копий, переменные, пробы, ресурсы |
+| Service | 10 (+1 в rag/) | постоянное имя для каждого сервиса + postgres + rabbitmq; gateway и web-ui типа NodePort (30080, 30090) |
 | StatefulSet + PVC | 2 | PostgreSQL и RabbitMQ: постоянное имя Pod-а и свой диск |
-| ConfigMap | 3 | `pad-config` (адреса, логи, таймауты), `rag-config` (Ollama), `postgres-init` (скрипт создания баз) |
+| ConfigMap | 2 (+1 в rag/) | `pad-config` (адреса, логи, таймауты, `GATEWAY_URL` для web-ui), `postgres-init` (скрипт создания баз); `rag-config` (Ollama) в наборе `rag/` |
 | Secret | 1 | `pad-secrets`: пароли баз, RabbitMQ, администратора, ключ JWT (создаётся из файла вне Git) |
-| Job | 1 | `rag-indexer`: разово строит индекс документации Odoo |
-| PVC | 1 (+2 у StatefulSet) | `rag-data`: индекс RAG |
-| Ingress | 1 | вход по `http://pad.local` через ingress-nginx |
+| Job | 1 в rag/ | `rag-indexer`: разово строит индекс документации Odoo |
+| PVC | 2 у StatefulSet (+1 в rag/) | диски PostgreSQL и RabbitMQ; `rag-data`: индекс RAG |
+| Ingress | 1 | вход по `http://pad.local` (gateway) и `http://ui.pad.local` (web-ui) через ingress-nginx |
 | HPA (extras) | 1 | автоматическое масштабирование order-service по CPU, включается отдельно |
 
-Копии: gateway, order-service, inventory-service по 2, остальные по 1 (почему — DECISIONS, раздел 8).
+Копии: gateway, web-ui, order-service, inventory-service по 2, остальные по 1 (почему — DECISIONS, раздел 8).
 
 ## 3. Используемые технологии
 
@@ -91,7 +95,7 @@ flowchart TB
    kubectl version --client
    ```
 2. Запустить Docker Desktop (значок кита в трее должен стать неподвижным).
-3. Запустить Minikube на Docker (4 ядра и 6 ГБ памяти: столько нужно 13 Pod-ам приложения и
+3. Запустить Minikube на Docker (4 ядра и 6 ГБ памяти: столько нужно Pod-ам приложения и
    системным Pod-ам Kubernetes, расчёт в DECISIONS, раздел 7):
    ```powershell
    minikube start --driver=docker --cpus=4 --memory=6g
@@ -115,9 +119,9 @@ flowchart TB
 ### Шаг 0. Проверка в Docker Compose (по требованиям — до Kubernetes)
 ```powershell
 cd lab2
-docker compose up --build -d
+docker compose up --build -d postgres rabbitmq auth-service catalog-service inventory-service order-service fulfillment-service notification-service gateway web-ui
 docker compose ps                         # все сервисы healthy
-curl.exe http://localhost:8080/api/status
+curl.exe http://localhost:8080/api/status # порт из GATEWAY_PORT в lab2\.env, если 8080 занят
 docker compose down                       # остановить перед Minikube, чтобы не делить память
 cd ..
 ```
@@ -126,8 +130,9 @@ cd ..
 ```powershell
 powershell -ExecutionPolicy Bypass -File lab3\scripts\build-images.ps1
 ```
-Скрипт переключает `docker` на Docker внутри Minikube и собирает 8 образов `pad/*:1.0.0` через
-`lab2/docker-compose.yml`. В конце печатает список образов: должно быть 8 строк `pad/...`.
+Скрипт переключает `docker` на Docker внутри Minikube и собирает 8 образов `pad/*:1.0.0`
+(6 сервисов, gateway, web-ui) через `lab2/docker-compose.yml`. В конце печатает список образов.
+С ключом `-WithRag` собирается ещё образ RAG.
 Если сборка внутри Minikube не идёт: `... build-images.ps1 -Mode load` (собрать в Docker Desktop
 и скопировать в Minikube, дольше).
 
@@ -136,14 +141,24 @@ powershell -ExecutionPolicy Bypass -File lab3\scripts\build-images.ps1
 powershell -ExecutionPolicy Bypass -File lab3\scripts\deploy.ps1
 ```
 Скрипт создаёт `lab3\k8s\secrets\secrets.env` из `lab2\.env`, выполняет
-`kubectl apply -k lab3\k8s` и ждёт готовности. То же вручную:
+`kubectl apply -k lab3\k8s` и ждёт готовности. С ключом `-WithRag` ещё применяет
+`kubectl apply -k lab3\k8s
+ag`. То же вручную:
 ```powershell
 python lab3\scripts\make_secrets.py
 kubectl apply -k lab3\k8s
 kubectl -n pad get pods -w                # Ctrl+C, когда все 1/1 Running
 ```
 
-### Шаг 3. Дождаться индекса RAG
+### Шаг 3. Открыть веб-интерфейс
+В **отдельном** окне PowerShell (держать открытым):
+```powershell
+kubectl -n pad port-forward svc/web-ui 8090:8000
+```
+Открыть http://localhost:8090, войти `admin` и паролем из `lab2\.env` (`ADMIN_PASSWORD`).
+Другой способ: `minikube service web-ui -n pad --url` печатает адрес NodePort 30090.
+
+### Шаг 3а (если развёрнут RAG). Дождаться индекса RAG
 ```powershell
 kubectl -n pad logs -f job/rag-indexer      # скачивание документации, обработка, индекс (несколько минут)
 kubectl -n pad get job rag-indexer          # COMPLETIONS 1/1
@@ -159,13 +174,13 @@ kubectl -n pad port-forward svc/gateway 8080:8000
 ```
 В основном окне:
 ```powershell
-curl.exe http://localhost:8080/api/status      # "all_ready": true
+curl.exe http://localhost:8080/api/status      # все сервисы ready; rag-assistant ready только с -WithRag
 ```
 Swagger gateway: http://localhost:8080/docs. Swagger отдельного сервиса:
 `kubectl -n pad port-forward svc/order-service 8004:8000` → http://localhost:8004/docs.
 Панель RabbitMQ: `kubectl -n pad port-forward svc/rabbitmq 15672` → http://localhost:15672.
 
-### Шаг 5. Ollama для ассистента
+### Шаг 5 (если развёрнут RAG). Ollama для ассистента
 Ассистенту нужна LLM на HOME-PC. На этом компьютере открыть SSH-туннель так, чтобы он
 принимал подключения не только с 127.0.0.1 (Pod приходит с адреса Docker):
 ```powershell
@@ -175,9 +190,10 @@ ssh -N -L 0.0.0.0:11434:localhost:11434 homepc
 ```powershell
 kubectl -n pad exec deploy/rag-assistant -- python -c "import urllib.request; print(urllib.request.urlopen('http://host.minikube.internal:11434/api/tags', timeout=5).read()[:200])"
 ```
-Если ошибка: в `lab3\k8s\configmaps\rag-config.yaml` поставить в `OLLAMA_URL` адрес HOME-PC в
+Если ошибка: в `lab3\k8s\rag\rag-config.yaml` поставить в `OLLAMA_URL` адрес HOME-PC в
 локальной сети (на HOME-PC Ollama должна слушать все адреса: переменная `OLLAMA_HOST=0.0.0.0`),
-затем `kubectl apply -k lab3\k8s` и `kubectl -n pad rollout restart deployment rag-assistant`.
+затем `kubectl apply -k lab3\k8s
+ag` и `kubectl -n pad rollout restart deployment rag-assistant`.
 Без Ollama всё остальное работает, `/api/assistant/search` тоже; `/api/assistant/ask` отвечает 503.
 
 ### Шаг 6 (дополнительно). Ingress
@@ -187,7 +203,8 @@ kubectl -n ingress-nginx get pods          # ingress-nginx-controller 1/1 Runnin
 minikube tunnel                            # в отдельном окне PowerShell от администратора, держать открытым
 ```
 В файл `C:\Windows\System32\drivers\etc\hosts` (Блокнот от администратора → Файл → Открыть)
-добавить строку `127.0.0.1 pad.local`, сохранить. Проверка: `curl.exe http://pad.local/api/status`.
+добавить строку `127.0.0.1 pad.local ui.pad.local`, сохранить. Проверка: `curl.exe http://pad.local/api/status`,
+интерфейс: http://ui.pad.local.
 
 ### Шаг 7 (дополнительно). Автомасштабирование
 ```powershell

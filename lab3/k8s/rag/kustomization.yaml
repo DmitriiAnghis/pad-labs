@@ -1,0 +1,20 @@
+# Необязательный набор: RAG-ассистент из лабы 1 (индексатор, ассистент, их настройки и диск).
+#   kubectl apply -k lab3/k8s/rag
+# Применяется после основного набора (kubectl apply -k lab3/k8s): namespace pad уже есть.
+# Отдельно, потому что ассистенту нужна Ollama на HOME-PC (SSH-туннель), а индексатор скачивает
+# документацию Odoo несколько минут. Без этого набора склад и web-ui работают полностью,
+# в /api/status gateway rag-assistant будет помечен как неготовый.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: pad
+
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: kustomize
+
+resources:
+  - rag-config.yaml
+  - rag-data-pvc.yaml
+  - rag-indexer.yaml
+  - rag-assistant-deployment.yaml
+  - rag-assistant-service.yaml

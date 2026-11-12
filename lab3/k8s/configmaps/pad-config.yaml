@@ -32,6 +32,7 @@ data:
   FULFILLMENT_URL: "http://fulfillment-service:8000"
   NOTIFICATION_URL: "http://notification-service:8000"
   RAG_URL: "http://rag-assistant:8000"
+  GATEWAY_URL: "http://gateway:8000"   # для web-ui: интерфейс ходит в систему только через gateway
 
   # gateway: запросов в минуту на одного пользователя. Счётчик хранится в памяти каждой копии
   # gateway, поэтому при 2 копиях фактический предел до 2 раз выше (см. lab3/DECISIONS.md).

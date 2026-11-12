@@ -78,7 +78,7 @@
 
 **Что сделано.** `configmaps/pad-config.yaml` — уровень логов, адреса сервисов
 (`http://order-service:8000`), адрес базы (`DATABASE_HOST=postgres`) и брокера, таймауты,
-лимит запросов gateway. `configmaps/rag-config.yaml` — адрес Ollama, модель LLM.
+лимит запросов gateway. `rag/rag-config.yaml` — адрес Ollama, модель LLM.
 `configmaps/postgres-init.yaml` — скрипт создания баз. В Deployment ConfigMap подключён
 целиком (`envFrom`).
 

@@ -1,0 +1,16 @@
+# Service web-ui: постоянный адрес для копий веб-интерфейса.
+# Тип NodePort: интерфейс открыт снаружи на порту 30090 узла Minikube
+# (minikube service web-ui -n pad --url или kubectl -n pad port-forward svc/web-ui 8090:8000).
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-ui
+  labels: { app.kubernetes.io/name: web-ui, app.kubernetes.io/part-of: pad-warehouse }
+spec:
+  type: NodePort
+  selector: { app.kubernetes.io/name: web-ui }
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      nodePort: 30090
