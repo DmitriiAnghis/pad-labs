@@ -1,0 +1,2 @@
+# Скрипты .sh запускаются внутри Linux-контейнеров: всегда переводы строк LF, иначе /bin/sh^M: bad interpreter
+*.sh text eol=lf

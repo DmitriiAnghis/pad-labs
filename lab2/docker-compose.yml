@@ -157,7 +157,7 @@ services:
       LOG_FORMAT: json
       AUTH_PUBLIC_KEY_URL: http://auth-service:8000/auth/public-key
       RATE_LIMIT_PER_MINUTE: "300"
-    ports: ["8080:8000"]
+    ports: ["${GATEWAY_PORT:-8080}:8000"]   # порт gateway на компьютере; меняется через GATEWAY_PORT в .env
 
 volumes:
   pgdata:
