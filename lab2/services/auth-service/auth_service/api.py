@@ -11,7 +11,6 @@ PATCH /users/{id}       изменить роли, имя, пароль, акт�
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Literal
 
 import jwt

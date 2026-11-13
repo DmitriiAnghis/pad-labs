@@ -1,0 +1,52 @@
+# CI лабы 2: проверка кода, тесты и сборка Docker-образов на серверах GitHub.
+# Запускается при push в main и при каждом Pull Request. Результат виден на GitHub
+# во вкладке Actions и прямо в Pull Request (зелёная галочка или красный крестик).
+# Шаги идут по очереди: если линтер нашёл ошибку, тесты не запускаются; если упали тесты,
+# образы не собираются.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Tool action: линтер Ruff ищет ошибки в коде без запуска (синтаксис, неизвестные имена,
+  # лишние импорты); pip-audit проверяет библиотеки на известные уязвимости.
+  lint:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: lab2 } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install ruff pip-audit
+      - name: Ruff
+        run: ruff check --select E9,F .
+      - name: Audit
+        # только сообщить об уязвимостях, не останавливать сборку: обновление библиотек отдельная задача
+        run: pip-audit -r web-ui/requirements.txt --progress-spinner off || true
+
+  # Test action: unit- и API-тесты всех сервисов (55 штук) на SQLite в памяти, без Docker.
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: lab2 } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e libs/pad_common bcrypt pytest jinja2 python-multipart
+      - run: python scripts/run_tests.py
+
+  # Build: собрать Docker-образы всех сервисов по их Dockerfile (без RAG: он долгий и большой).
+  # Проверяет, что Dockerfile-ы не сломаны. Образы никуда не загружаются.
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: lab2 } }
+    steps:
+      - uses: actions/checkout@v4
+      - name: .env с тестовыми паролями (docker compose требует его даже для сборки)
+        run: python3 -c "import re; open('.env','w').write(re.sub(r'change-me','ci', open('.env.example').read()))"
+      - run: docker compose build auth-service catalog-service inventory-service order-service fulfillment-service notification-service gateway web-ui
