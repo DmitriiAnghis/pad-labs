@@ -9,6 +9,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:   # кнопка Run workflow на вкладке Actions: запустить вручную
 
 jobs:
   # Tool action: линтер Ruff ищет ошибки в коде без запуска (синтаксис, неизвестные имена,
