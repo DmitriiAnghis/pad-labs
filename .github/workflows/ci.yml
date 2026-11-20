@@ -1,8 +1,4 @@
-# CI/CD лабы 2 и 3: проверка кода, тесты, сборка Docker-образов и развёртывание в Kubernetes на серверах GitHub.
-# Запускается при push в main и при каждом Pull Request. Результат виден на GitHub
-# во вкладке Actions и прямо в Pull Request (зелёная галочка или красный крестик).
-# Шаги идут по очереди: если линтер нашёл ошибку, тесты не запускаются; если упали тесты,
-# образы не собираются.
+
 name: CI/CD
 
 on:
@@ -52,10 +48,7 @@ jobs:
         run: python3 -c "import re; open('.env','w').write(re.sub(r'change-me','ci', open('.env.example').read()))"
       - run: docker compose build auth-service catalog-service inventory-service order-service fulfillment-service notification-service gateway web-ui
 
-  # CD (Deploy action, среда dev): развернуть систему в Kubernetes и проверить её сквозными тестами.
-  # Kubernetes здесь — kind (Kubernetes in Docker): временный кластер прямо на машине GitHub,
-  # такой же, как Minikube на ПК. Применяются те же манифесты lab3/k8s, что и на защите.
-  # Запускается только для main (push или кнопка), не для каждого Pull Request.
+
   deploy-dev:
     needs: build
     if: github.ref == 'refs/heads/main'
@@ -92,8 +85,33 @@ jobs:
           kubectl -n pad get pods
       - name: Сквозные тесты против кластера
         run: |
+          # сервисы, которые работают с событиями, должны подключиться к RabbitMQ
+          for d in inventory-service order-service fulfillment-service notification-service; do
+            for i in $(seq 1 60); do
+              n=$(kubectl -n pad logs -l app.kubernetes.io/name=$d --tail=-1 | grep -c "connected to RabbitMQ" || true)
+              want=$(kubectl -n pad get deploy $d -o jsonpath='{.spec.replicas}')
+              [ "$n" -ge "$want" ] && echo "$d: $n/$want connected" && break
+              sleep 3
+            done
+          done
           kubectl -n pad port-forward svc/gateway 8080:8000 > /dev/null 2>&1 &
-          sleep 5
+          # ждём, пока gateway ответит и все 6 складских сервисов (без RAG) будут готовы,
+          # включая подключение к RabbitMQ: иначе первый тест может прийти раньше системы
+          python - <<'WAIT'
+          import json, time, urllib.request
+          need = {"auth-service", "catalog-service", "inventory-service", "order-service", "fulfillment-service", "notification-service"}
+          for i in range(60):
+              try:
+                  st = json.load(urllib.request.urlopen("http://localhost:8080/api/status", timeout=3))
+                  ready = {k for k, v in st["services"].items() if v.get("ready")}
+                  if need <= ready:
+                      print("ready after", i * 3, "s"); break
+              except Exception as e:
+                  print("waiting:", type(e).__name__)
+              time.sleep(3)
+          else:
+              raise SystemExit("system is not ready")
+          WAIT
           export E2E_BASE_URL=http://localhost:8080
           export E2E_ADMIN_PASSWORD=$(grep '^ADMIN_PASSWORD=' lab2/.env | cut -d= -f2)
           python -m pytest lab2/tests/e2e -v
