@@ -11,8 +11,9 @@ from common.config import PipelineConfig, Settings  # noqa: E402
 
 @pytest.fixture
 def settings(tmp_path) -> Settings:
-    """Settings with an empty temporary data directory (tests never touch data/)."""
-    return Settings.from_env().model_copy(update={"data_dir": tmp_path / "data", "ollama_url": "http://127.0.0.1:9"})
+    """Settings with an empty temporary data directory (tests never touch data/ and never send traces)."""
+    return Settings.from_env().model_copy(update={"data_dir": tmp_path / "data", "ollama_url": "http://127.0.0.1:9",
+                                                  "langfuse_public_key": None, "langfuse_secret_key": None})
 
 
 @pytest.fixture

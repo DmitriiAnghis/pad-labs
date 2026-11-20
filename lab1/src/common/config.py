@@ -61,6 +61,9 @@ class Settings(BaseModel):
     api_port: int
     log_level: str
     log_format: str
+    langfuse_host: str
+    langfuse_public_key: Optional[str]
+    langfuse_secret_key: Optional[str]
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -89,6 +92,9 @@ class Settings(BaseModel):
             api_port=int(_env("API_PORT", "8000")),
             log_level=_env("LOG_LEVEL", "INFO").upper(),
             log_format=_env("LOG_FORMAT", "text").lower(),
+            langfuse_host=_env("LANGFUSE_HOST", "http://localhost:3000").rstrip("/"),
+            langfuse_public_key=os.environ.get("LANGFUSE_PUBLIC_KEY") or None,
+            langfuse_secret_key=os.environ.get("LANGFUSE_SECRET_KEY") or None,
         )
 
     # Well-known sub-directories of DATA_DIR

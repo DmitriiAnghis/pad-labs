@@ -7,6 +7,7 @@ import time
 
 import requests
 
+from common import tracing
 from common.config import Settings
 
 log = logging.getLogger("generation.ollama")
@@ -42,7 +43,25 @@ class OllamaClient:
         max_tokens: int = 700,
         temperature: float | None = None,
         json_format: bool = False,
+        name: str = "llm",
     ) -> dict:
+        """One chat request; inside a traced request it is recorded as a Langfuse generation `name`."""
+        started = time.time()
+        try:
+            reply = self._chat(model, messages, max_tokens, temperature, json_format)
+        except OllamaError as exc:
+            tracing.record_generation(name, model, messages, None, started, error=str(exc))
+            raise
+        tracing.record_generation(
+            name, reply["model"], messages, reply["text"], started,
+            model_parameters={"max_tokens": max_tokens, "json_format": json_format, "num_ctx": self.num_ctx,
+                              "temperature": self.default_temperature if temperature is None else temperature},
+            usage={"input": reply["prompt_tokens"], "output": reply["completion_tokens"], "unit": "TOKENS"},
+        )
+        return reply
+
+    def _chat(self, model: str, messages: list[dict], max_tokens: int, temperature: float | None,
+              json_format: bool) -> dict:
         payload = {
             "model": model,
             "messages": messages,
