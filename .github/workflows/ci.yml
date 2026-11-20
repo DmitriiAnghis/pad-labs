@@ -18,8 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: lab2 } }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with: { python-version: "3.12" }
       - run: pip install ruff pip-audit
       - name: Ruff
@@ -34,8 +34,8 @@ jobs:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: lab2 } }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with: { python-version: "3.12" }
       - run: pip install -e libs/pad_common bcrypt pytest jinja2 python-multipart
       - run: python scripts/run_tests.py
@@ -47,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: lab2 } }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: .env с тестовыми паролями (docker compose требует его даже для сборки)
         run: python3 -c "import re; open('.env','w').write(re.sub(r'change-me','ci', open('.env.example').read()))"
       - run: docker compose build auth-service catalog-service inventory-service order-service fulfillment-service notification-service gateway web-ui
@@ -62,8 +62,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev            # на GitHub видно как развёртывание в среду dev (вкладка Environments)
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with: { python-version: "3.12" }
       - name: Пароли для этого запуска (случайные, нигде не сохраняются)
         run: |
